@@ -21,6 +21,8 @@ export interface AwardInput {
   comebackOnCooldown?: boolean;
   // Optional active event multiplier (e.g. Double Points Hour, challenge track).
   eventMultiplier?: number;
+  // PRD §9 onboarding bonus: first 7 days earn at 1.5×, no stake charged.
+  firstWeekMultiplier?: number;
 }
 
 export interface AwardResult {
@@ -106,6 +108,11 @@ export function awardForBehavior(input: AwardInput): AwardResult {
   if (input.eventMultiplier && input.eventMultiplier > 1) {
     multiplier *= input.eventMultiplier;
     reasons.push(`Event multiplier: ${input.eventMultiplier}×`);
+  }
+
+  if (input.firstWeekMultiplier && input.firstWeekMultiplier > 1) {
+    multiplier *= input.firstWeekMultiplier;
+    reasons.push(`First-week bonus: ${input.firstWeekMultiplier}×`);
   }
 
   const beforeCap = Math.round(def.points * multiplier);

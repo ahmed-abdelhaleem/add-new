@@ -4,13 +4,32 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type {
+  AccountabilityCall,
+  AccountabilityPartner,
+  ActionItem,
+  BankTransaction,
+  BonusEvent,
+  BonusEventKind,
+  BonusEventPayload,
   BrainDump,
   BrainDumpCategorization,
+  CharityDisbursement,
+  CommunityChallenge,
+  CuriosityItem,
   DailyPlan,
   EveningLog,
+  HealthSample,
   LoggedBehavior,
+  MedicationLog,
+  MonthlyReport,
   MonthlyState,
+  MoodLog,
+  OnboardingAnswers,
+  PartnerBoost,
+  Payment,
   StakeTier,
+  TrackEnrollment,
+  WishlistItem,
 } from "./types";
 
 let _db: Database.Database | null = null;
@@ -40,7 +59,15 @@ function migrate(db: Database.Database) {
       tier TEXT NOT NULL,
       stake_sek INTEGER NOT NULL,
       charity TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      onboarded_at TEXT,
+      onboarding_answers TEXT,
+      first_week_bonus_until TEXT,
+      total_lifetime_points INTEGER NOT NULL DEFAULT 0,
+      partner_id TEXT,
+      health_provider TEXT,
+      bank_connected INTEGER NOT NULL DEFAULT 0,
+      payment_connected INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS behaviors (
@@ -122,6 +149,188 @@ function migrate(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
     CREATE INDEX IF NOT EXISTS idx_ace_messages_user ON ace_messages(user_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS wishlist (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT,
+      category TEXT NOT NULL,
+      cost_sek INTEGER NOT NULL,
+      rate TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      cooled_until TEXT NOT NULL,
+      redeemed_at TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS curiosity_queue (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      resolved_at TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS action_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      done_at TEXT,
+      source TEXT NOT NULL DEFAULT 'manual',
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS mood_logs (
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      mood INTEGER NOT NULL,
+      note TEXT,
+      PRIMARY KEY (user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS medication_logs (
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      taken INTEGER NOT NULL,
+      note TEXT,
+      PRIMARY KEY (user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS partners (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      verified INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS partner_boosts (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      awarded_points INTEGER NOT NULL,
+      message TEXT,
+      sent_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (partner_id) REFERENCES partners(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS bonus_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      completed_at TEXT,
+      awarded_points INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_bonus_events_user ON bonus_events(user_id, starts_at);
+
+    CREATE TABLE IF NOT EXISTS track_enrollments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      track_key TEXT NOT NULL,
+      enrolled_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      completed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS community_challenges (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      starts_at TEXT NOT NULL,
+      ends_at TEXT NOT NULL,
+      bonus_points INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS community_participations (
+      challenge_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      enrolled_at TEXT NOT NULL,
+      PRIMARY KEY (challenge_id, user_id),
+      FOREIGN KEY (challenge_id) REFERENCES community_challenges(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      amount_sek INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      external_id TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS bank_transactions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      merchant TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount_sek INTEGER NOT NULL,
+      detected_at TEXT NOT NULL,
+      intercepted INTEGER NOT NULL DEFAULT 0,
+      cancelled INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS health_samples (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      value REAL NOT NULL,
+      unit TEXT NOT NULL,
+      sampled_at TEXT NOT NULL,
+      source TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_health_user_kind ON health_samples(user_id, kind, sampled_at);
+
+    CREATE TABLE IF NOT EXISTS monthly_reports (
+      user_id TEXT NOT NULL,
+      month_key TEXT NOT NULL,
+      content TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, month_key),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS accountability_calls (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      transcript TEXT NOT NULL,
+      awarded_points INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS charity_disbursements (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      month_key TEXT NOT NULL,
+      amount_sek REAL NOT NULL,
+      charity TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
   `);
 }
 
@@ -134,15 +343,43 @@ function seedIfEmpty(db: Database.Database) {
   const userId = "user_demo";
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO users (id, name, tier, stake_sek, charity, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(userId, "Saeed", "Standard", 1000, "Läkare Utan Gränser", now);
+    `INSERT INTO users (id, name, tier, stake_sek, charity, created_at, onboarded_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(userId, "Saeed", "Standard", 1000, "Läkare Utan Gränser", now, now);
 
   const monthKey = now.slice(0, 7);
   db.prepare(
     `INSERT INTO monthly_state (user_id, month_key, stake_sek, tier, charity)
      VALUES (?, ?, ?, ?, ?)`
   ).run(userId, monthKey, 1000, "Standard", "Läkare Utan Gränser");
+
+  // Seed a few community challenges so the page isn't empty.
+  const seedChallenge = (id: string, title: string, description: string, startOffset: number, days: number, bonus: number) => {
+    const start = new Date();
+    start.setDate(start.getDate() + startOffset);
+    const end = new Date(start);
+    end.setDate(end.getDate() + days);
+    db.prepare(
+      `INSERT INTO community_challenges (id, title, description, starts_at, ends_at, bonus_points)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, start.toISOString(), end.toISOString(), bonus);
+  };
+  seedChallenge(
+    "cc_feb_consistency",
+    "Stockholm Consistency Sprint",
+    "100 users, top 20 earn 50,000 bonus pts. Anonymous leaderboard.",
+    -3,
+    30,
+    50000
+  );
+  seedChallenge(
+    "cc_outdoor",
+    "March Outdoor Month",
+    "Any outdoor behavior scores 2× for the month. Opt-in.",
+    -1,
+    30,
+    20000
+  );
 }
 
 export const DEMO_USER_ID = "user_demo";
@@ -154,12 +391,60 @@ export interface UserRow {
   stake_sek: number;
   charity: string;
   created_at: string;
+  onboarded_at: string | null;
+  onboarding_answers: string | null;
+  first_week_bonus_until: string | null;
+  total_lifetime_points: number;
+  partner_id: string | null;
+  health_provider: string | null;
+  bank_connected: number;
+  payment_connected: number;
 }
 
 export function getUser(userId: string): UserRow | undefined {
   return getDb()
     .prepare("SELECT * FROM users WHERE id = ?")
     .get(userId) as UserRow | undefined;
+}
+
+export function updateUser(userId: string, patch: Partial<{
+  name: string;
+  tier: StakeTier;
+  stake_sek: number;
+  charity: string;
+  onboarded_at: string;
+  onboarding_answers: OnboardingAnswers;
+  first_week_bonus_until: string;
+  partner_id: string | null;
+  health_provider: string | null;
+  bank_connected: boolean;
+  payment_connected: boolean;
+}>) {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    if (k === "onboarding_answers") {
+      fields.push(`${k} = ?`);
+      values.push(JSON.stringify(v));
+    } else if (k === "bank_connected" || k === "payment_connected") {
+      fields.push(`${k} = ?`);
+      values.push(v ? 1 : 0);
+    } else {
+      fields.push(`${k} = ?`);
+      values.push(v);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(userId);
+  getDb().prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).run(...(values as never[]));
+}
+
+export function addLifetimePoints(userId: string, points: number) {
+  if (points <= 0) return;
+  getDb()
+    .prepare(`UPDATE users SET total_lifetime_points = total_lifetime_points + ? WHERE id = ?`)
+    .run(points, userId);
 }
 
 export function listBehaviorsForMonth(userId: string, monthKey: string): LoggedBehavior[] {
@@ -191,6 +476,7 @@ export function insertBehavior(b: LoggedBehavior) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(b.id, b.userId, b.behavior, b.rawPoints, b.awardedPoints, b.multiplier, b.loggedAt, b.note ?? null);
+  addLifetimePoints(b.userId, b.awardedPoints);
 }
 
 export function getMonthlyState(userId: string, monthKey: string): MonthlyState | undefined {
@@ -237,6 +523,17 @@ export function recordSpend(userId: string, monthKey: string, points: number) {
        WHERE user_id = ? AND month_key = ?`
     )
     .run(points, userId, monthKey);
+}
+
+export function recordBonus(userId: string, monthKey: string, points: number) {
+  ensureMonthlyState(userId, monthKey);
+  getDb()
+    .prepare(
+      `UPDATE monthly_state SET bonus_points = bonus_points + ?, points_earned = points_earned + ?
+       WHERE user_id = ? AND month_key = ?`
+    )
+    .run(points, points, userId, monthKey);
+  addLifetimePoints(userId, points);
 }
 
 export function isComebackOnCooldown(userId: string, monthKey: string, now: Date): boolean {
@@ -411,4 +708,502 @@ export function insertRedemption(opts: {
     )
     .run(id, opts.userId, opts.itemId, opts.pointsSpent, opts.sekValue, opts.rate, at);
   return id;
+}
+
+// ── Wishlist ────────────────────────────────────────────────────────
+
+export function insertWishlistItem(item: WishlistItem) {
+  getDb()
+    .prepare(
+      `INSERT INTO wishlist (id, user_id, title, url, category, cost_sek, rate, added_at, cooled_until, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      item.id,
+      item.userId,
+      item.title,
+      item.url ?? null,
+      item.category,
+      item.costSEK,
+      item.rate,
+      item.addedAt,
+      item.cooledUntil,
+      item.source
+    );
+}
+
+export function listWishlist(userId: string): WishlistItem[] {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, title, url, category, cost_sek as costSEK, rate,
+              added_at as addedAt, cooled_until as cooledUntil, redeemed_at as redeemedAt, source
+         FROM wishlist WHERE user_id = ? ORDER BY added_at DESC`
+    )
+    .all(userId) as WishlistItem[];
+}
+
+export function markWishlistRedeemed(id: string) {
+  getDb().prepare(`UPDATE wishlist SET redeemed_at = ? WHERE id = ?`).run(new Date().toISOString(), id);
+}
+
+export function deleteWishlistItem(id: string, userId: string) {
+  getDb().prepare(`DELETE FROM wishlist WHERE id = ? AND user_id = ?`).run(id, userId);
+}
+
+// ── Curiosity Queue ─────────────────────────────────────────────────
+
+export function insertCuriosity(userId: string, text: string, source: CuriosityItem["source"] = "manual"): CuriosityItem {
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  getDb()
+    .prepare(`INSERT INTO curiosity_queue (id, user_id, text, added_at, source) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, userId, text, at, source);
+  return { id, text, addedAt: at, source };
+}
+
+export function listCuriosity(userId: string): CuriosityItem[] {
+  return getDb()
+    .prepare(
+      `SELECT id, text, added_at as addedAt, resolved_at as resolvedAt, source
+         FROM curiosity_queue WHERE user_id = ? ORDER BY added_at DESC`
+    )
+    .all(userId) as CuriosityItem[];
+}
+
+export function resolveCuriosity(id: string, userId: string) {
+  getDb()
+    .prepare(`UPDATE curiosity_queue SET resolved_at = ? WHERE id = ? AND user_id = ?`)
+    .run(new Date().toISOString(), id, userId);
+}
+
+// ── Action Items ────────────────────────────────────────────────────
+
+export function insertActionItem(userId: string, text: string, source: ActionItem["source"] = "manual"): ActionItem {
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  getDb()
+    .prepare(`INSERT INTO action_items (id, user_id, text, added_at, source) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, userId, text, at, source);
+  return { id, text, addedAt: at, source };
+}
+
+export function listActionItems(userId: string): ActionItem[] {
+  return getDb()
+    .prepare(
+      `SELECT id, text, added_at as addedAt, done_at as doneAt, source
+         FROM action_items WHERE user_id = ? ORDER BY added_at DESC`
+    )
+    .all(userId) as ActionItem[];
+}
+
+export function completeActionItem(id: string, userId: string) {
+  getDb()
+    .prepare(`UPDATE action_items SET done_at = ? WHERE id = ? AND user_id = ?`)
+    .run(new Date().toISOString(), id, userId);
+}
+
+// ── Mood ────────────────────────────────────────────────────────────
+
+export function upsertMood(userId: string, log: MoodLog) {
+  getDb()
+    .prepare(
+      `INSERT INTO mood_logs (user_id, date, mood, note) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, date) DO UPDATE SET mood = excluded.mood, note = excluded.note`
+    )
+    .run(userId, log.date, log.mood, log.note ?? null);
+}
+
+export function listMood(userId: string): MoodLog[] {
+  return getDb()
+    .prepare(`SELECT date, mood, note FROM mood_logs WHERE user_id = ? ORDER BY date ASC`)
+    .all(userId) as MoodLog[];
+}
+
+// ── Medication ──────────────────────────────────────────────────────
+
+export function upsertMedication(userId: string, log: MedicationLog) {
+  getDb()
+    .prepare(
+      `INSERT INTO medication_logs (user_id, date, taken, note) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, date) DO UPDATE SET taken = excluded.taken, note = excluded.note`
+    )
+    .run(userId, log.date, log.taken ? 1 : 0, log.note ?? null);
+}
+
+export function listMedication(userId: string): MedicationLog[] {
+  const rows = getDb()
+    .prepare(`SELECT date, taken, note FROM medication_logs WHERE user_id = ? ORDER BY date ASC`)
+    .all(userId) as Array<{ date: string; taken: number; note: string | null }>;
+  return rows.map((r) => ({ date: r.date, taken: r.taken === 1, note: r.note ?? undefined }));
+}
+
+// ── Partners ────────────────────────────────────────────────────────
+
+export function insertPartner(userId: string, name: string, email: string): AccountabilityPartner {
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO partners (id, user_id, name, email, verified, created_at) VALUES (?, ?, ?, ?, 0, ?)`
+    )
+    .run(id, userId, name, email, at);
+  updateUser(userId, { partner_id: id });
+  return { id, name, email, verified: false, createdAt: at };
+}
+
+export function verifyPartner(id: string) {
+  getDb().prepare(`UPDATE partners SET verified = 1 WHERE id = ?`).run(id);
+}
+
+export function getPartner(userId: string): AccountabilityPartner | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT id, name, email, verified, created_at as createdAt FROM partners WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(userId) as
+    | { id: string; name: string; email: string; verified: number; createdAt: string }
+    | undefined;
+  if (!row) return undefined;
+  return { id: row.id, name: row.name, email: row.email, verified: row.verified === 1, createdAt: row.createdAt };
+}
+
+export function removePartner(userId: string) {
+  getDb().prepare(`DELETE FROM partners WHERE user_id = ?`).run(userId);
+  updateUser(userId, { partner_id: null });
+}
+
+export function insertPartnerBoost(opts: {
+  partnerId: string;
+  userId: string;
+  awardedPoints: number;
+  message?: string;
+}): PartnerBoost {
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO partner_boosts (id, partner_id, user_id, awarded_points, message, sent_at) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(id, opts.partnerId, opts.userId, opts.awardedPoints, opts.message ?? null, at);
+  return { id, partnerId: opts.partnerId, awardedPoints: opts.awardedPoints, message: opts.message, sentAt: at };
+}
+
+export function listPartnerBoosts(userId: string): PartnerBoost[] {
+  return getDb()
+    .prepare(
+      `SELECT id, partner_id as partnerId, awarded_points as awardedPoints, message, sent_at as sentAt
+         FROM partner_boosts WHERE user_id = ? ORDER BY sent_at DESC`
+    )
+    .all(userId) as PartnerBoost[];
+}
+
+// ── Bonus events ────────────────────────────────────────────────────
+
+export function insertBonusEvent(opts: {
+  userId: string;
+  kind: BonusEventKind;
+  payload: BonusEventPayload;
+  startsAt: string;
+  endsAt: string;
+}): BonusEvent {
+  const id = randomUUID();
+  getDb()
+    .prepare(
+      `INSERT INTO bonus_events (id, user_id, kind, payload, starts_at, ends_at) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(id, opts.userId, opts.kind, JSON.stringify(opts.payload), opts.startsAt, opts.endsAt);
+  return {
+    id,
+    userId: opts.userId,
+    kind: opts.kind,
+    payload: opts.payload,
+    startsAt: opts.startsAt,
+    endsAt: opts.endsAt,
+  };
+}
+
+export function listActiveBonusEvents(userId: string, now: Date = new Date()): BonusEvent[] {
+  const iso = now.toISOString();
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, kind, payload, starts_at as startsAt, ends_at as endsAt,
+              completed_at as completedAt, awarded_points as awardedPoints
+         FROM bonus_events
+        WHERE user_id = ? AND starts_at <= ? AND ends_at >= ? AND completed_at IS NULL
+        ORDER BY starts_at ASC`
+    )
+    .all(userId, iso, iso) as Array<{ payload: string } & Omit<BonusEvent, "payload">>;
+  return rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+}
+
+export function listAllBonusEvents(userId: string, limit = 20): BonusEvent[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, kind, payload, starts_at as startsAt, ends_at as endsAt,
+              completed_at as completedAt, awarded_points as awardedPoints
+         FROM bonus_events WHERE user_id = ? ORDER BY starts_at DESC LIMIT ?`
+    )
+    .all(userId, limit) as Array<{ payload: string } & Omit<BonusEvent, "payload">>;
+  return rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
+}
+
+export function completeBonusEvent(id: string, awardedPoints: number) {
+  getDb()
+    .prepare(`UPDATE bonus_events SET completed_at = ?, awarded_points = ? WHERE id = ?`)
+    .run(new Date().toISOString(), awardedPoints, id);
+}
+
+// ── Tracks ──────────────────────────────────────────────────────────
+
+export function insertTrackEnrollment(opts: {
+  userId: string;
+  trackKey: string;
+  enrolledAt: string;
+  endsAt: string;
+}): TrackEnrollment {
+  const id = randomUUID();
+  getDb()
+    .prepare(
+      `INSERT INTO track_enrollments (id, user_id, track_key, enrolled_at, ends_at) VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(id, opts.userId, opts.trackKey, opts.enrolledAt, opts.endsAt);
+  return { id, userId: opts.userId, trackKey: opts.trackKey, enrolledAt: opts.enrolledAt, endsAt: opts.endsAt };
+}
+
+export function listActiveTrackEnrollments(userId: string, now: Date = new Date()): TrackEnrollment[] {
+  const iso = now.toISOString();
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, track_key as trackKey, enrolled_at as enrolledAt,
+              ends_at as endsAt, completed_at as completedAt
+         FROM track_enrollments
+        WHERE user_id = ? AND ends_at >= ? AND completed_at IS NULL`
+    )
+    .all(userId, iso) as TrackEnrollment[];
+}
+
+export function listAllTrackEnrollments(userId: string): TrackEnrollment[] {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, track_key as trackKey, enrolled_at as enrolledAt,
+              ends_at as endsAt, completed_at as completedAt
+         FROM track_enrollments WHERE user_id = ? ORDER BY enrolled_at DESC`
+    )
+    .all(userId) as TrackEnrollment[];
+}
+
+export function completeTrack(id: string) {
+  getDb()
+    .prepare(`UPDATE track_enrollments SET completed_at = ? WHERE id = ?`)
+    .run(new Date().toISOString(), id);
+}
+
+// ── Community challenges ───────────────────────────────────────────
+
+export function listCommunityChallenges(): CommunityChallenge[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, title, description, starts_at as startsAt, ends_at as endsAt, bonus_points as bonusPoints
+         FROM community_challenges ORDER BY starts_at DESC`
+    )
+    .all() as Array<Omit<CommunityChallenge, "participants">>;
+  const countStmt = getDb().prepare(
+    `SELECT COUNT(*) as c FROM community_participations WHERE challenge_id = ?`
+  );
+  return rows.map((r) => ({ ...r, participants: (countStmt.get(r.id) as { c: number }).c }));
+}
+
+export function isEnrolledInChallenge(challengeId: string, userId: string): boolean {
+  const row = getDb()
+    .prepare(`SELECT 1 FROM community_participations WHERE challenge_id = ? AND user_id = ?`)
+    .get(challengeId, userId);
+  return !!row;
+}
+
+export function enrollInChallenge(challengeId: string, userId: string) {
+  getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO community_participations (challenge_id, user_id, enrolled_at) VALUES (?, ?, ?)`
+    )
+    .run(challengeId, userId, new Date().toISOString());
+}
+
+export function unenrollFromChallenge(challengeId: string, userId: string) {
+  getDb()
+    .prepare(`DELETE FROM community_participations WHERE challenge_id = ? AND user_id = ?`)
+    .run(challengeId, userId);
+}
+
+// ── Payments ───────────────────────────────────────────────────────
+
+export function insertPayment(p: Payment) {
+  getDb()
+    .prepare(
+      `INSERT INTO payments (id, user_id, amount_sek, kind, provider, status, external_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(p.id, p.userId, p.amountSEK, p.kind, p.provider, p.status, p.externalId ?? null, p.createdAt);
+}
+
+export function listPayments(userId: string): Payment[] {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, amount_sek as amountSEK, kind, provider, status,
+              external_id as externalId, created_at as createdAt
+         FROM payments WHERE user_id = ? ORDER BY created_at DESC`
+    )
+    .all(userId) as Payment[];
+}
+
+// ── Bank transactions ──────────────────────────────────────────────
+
+export function insertBankTransaction(t: BankTransaction) {
+  getDb()
+    .prepare(
+      `INSERT INTO bank_transactions (id, user_id, merchant, category, amount_sek, detected_at, intercepted, cancelled, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      t.id,
+      t.userId,
+      t.merchant,
+      t.category,
+      t.amountSEK,
+      t.detectedAt,
+      t.intercepted ? 1 : 0,
+      t.cancelled ? 1 : 0,
+      t.status
+    );
+}
+
+export function listBankTransactions(userId: string): BankTransaction[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, merchant, category, amount_sek as amountSEK,
+              detected_at as detectedAt, intercepted, cancelled, status
+         FROM bank_transactions WHERE user_id = ? ORDER BY detected_at DESC LIMIT 50`
+    )
+    .all(userId) as Array<{
+    id: string;
+    userId: string;
+    merchant: string;
+    category: BankTransaction["category"];
+    amountSEK: number;
+    detectedAt: string;
+    intercepted: number;
+    cancelled: number;
+    status: BankTransaction["status"];
+  }>;
+  return rows.map((r) => ({ ...r, intercepted: r.intercepted === 1, cancelled: r.cancelled === 1 }));
+}
+
+export function updateBankTransactionStatus(id: string, status: BankTransaction["status"], cancelled: boolean) {
+  getDb()
+    .prepare(`UPDATE bank_transactions SET status = ?, cancelled = ? WHERE id = ?`)
+    .run(status, cancelled ? 1 : 0, id);
+}
+
+// ── Health samples ─────────────────────────────────────────────────
+
+export function insertHealthSample(s: HealthSample) {
+  getDb()
+    .prepare(
+      `INSERT INTO health_samples (id, user_id, kind, value, unit, sampled_at, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(s.id, s.userId, s.kind, s.value, s.unit, s.sampledAt, s.source);
+}
+
+export function listHealthSamples(userId: string, kind?: HealthSample["kind"]): HealthSample[] {
+  if (kind) {
+    return getDb()
+      .prepare(
+        `SELECT id, user_id as userId, kind, value, unit, sampled_at as sampledAt, source
+           FROM health_samples WHERE user_id = ? AND kind = ? ORDER BY sampled_at DESC LIMIT 200`
+      )
+      .all(userId, kind) as HealthSample[];
+  }
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, kind, value, unit, sampled_at as sampledAt, source
+         FROM health_samples WHERE user_id = ? ORDER BY sampled_at DESC LIMIT 200`
+    )
+    .all(userId) as HealthSample[];
+}
+
+// ── Monthly reports ────────────────────────────────────────────────
+
+export function upsertMonthlyReport(userId: string, report: MonthlyReport) {
+  getDb()
+    .prepare(
+      `INSERT INTO monthly_reports (user_id, month_key, content, generated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id, month_key) DO UPDATE SET content = excluded.content, generated_at = excluded.generated_at`
+    )
+    .run(userId, report.monthKey, report.content, report.generatedAt);
+}
+
+export function getMonthlyReport(userId: string, monthKey: string): MonthlyReport | undefined {
+  const row = getDb()
+    .prepare(`SELECT month_key as monthKey, content, generated_at as generatedAt FROM monthly_reports WHERE user_id = ? AND month_key = ?`)
+    .get(userId, monthKey) as MonthlyReport | undefined;
+  return row;
+}
+
+export function listMonthlyReports(userId: string): MonthlyReport[] {
+  return getDb()
+    .prepare(`SELECT month_key as monthKey, content, generated_at as generatedAt FROM monthly_reports WHERE user_id = ? ORDER BY month_key DESC`)
+    .all(userId) as MonthlyReport[];
+}
+
+// ── Accountability calls ──────────────────────────────────────────
+
+export function insertCall(userId: string, call: AccountabilityCall) {
+  getDb()
+    .prepare(
+      `INSERT INTO accountability_calls (id, user_id, started_at, ended_at, transcript, awarded_points)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(call.id, userId, call.startedAt, call.endedAt ?? null, JSON.stringify(call.transcript), call.awardedPoints);
+}
+
+export function listCalls(userId: string): AccountabilityCall[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, started_at as startedAt, ended_at as endedAt, transcript, awarded_points as awardedPoints
+         FROM accountability_calls WHERE user_id = ? ORDER BY started_at DESC LIMIT 20`
+    )
+    .all(userId) as Array<{
+    id: string;
+    startedAt: string;
+    endedAt: string | null;
+    transcript: string;
+    awardedPoints: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    startedAt: r.startedAt,
+    endedAt: r.endedAt ?? undefined,
+    transcript: JSON.parse(r.transcript),
+    awardedPoints: r.awardedPoints,
+  }));
+}
+
+// ── Charity ────────────────────────────────────────────────────────
+
+export function insertCharityDisbursement(d: CharityDisbursement & { userId: string }) {
+  getDb()
+    .prepare(
+      `INSERT INTO charity_disbursements (id, user_id, month_key, amount_sek, charity, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(d.id, d.userId, d.monthKey, d.amountSEK, d.charity, d.status, d.createdAt);
+}
+
+export function listCharityDisbursements(userId: string): CharityDisbursement[] {
+  return getDb()
+    .prepare(
+      `SELECT id, month_key as monthKey, amount_sek as amountSEK, charity, status, created_at as createdAt
+         FROM charity_disbursements WHERE user_id = ? ORDER BY created_at DESC`
+    )
+    .all(userId) as CharityDisbursement[];
 }

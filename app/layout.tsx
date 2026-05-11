@@ -14,7 +14,7 @@ const NAV = [
   { href: "/log", label: "Log" },
   { href: "/dump", label: "Dump" },
   { href: "/ace", label: "ACE" },
-  { href: "/vault", label: "Vault" },
+  { href: "/more", label: "More" },
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {

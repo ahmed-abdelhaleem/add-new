@@ -6,14 +6,20 @@ import { BEHAVIOR_INDEX } from "@/lib/economy";
 import {
   DEMO_USER_ID,
   ensureMonthlyState,
+  getUser,
   insertBehavior,
   isComebackOnCooldown,
+  listActiveBonusEvents,
+  listActiveTrackEnrollments,
   listBehaviorsAll,
   listBehaviorsForMonth,
   markComebackUsed,
   recordEarn,
 } from "@/lib/db";
+import { activeEventMultiplier } from "@/lib/events";
 import { awardForBehavior, daysSinceLastActivity } from "@/lib/points";
+import { FIRST_WEEK_MULTIPLIER, isInFirstWeek } from "@/lib/onboarding";
+import { TRACK_INDEX } from "@/lib/tracks";
 import { monthKey } from "@/lib/time";
 import type { LoggedBehavior } from "@/lib/types";
 
@@ -33,6 +39,7 @@ export async function POST(req: Request) {
   }
 
   const userId = DEMO_USER_ID;
+  const user = getUser(userId);
   const now = new Date();
   const mk = monthKey(now);
   ensureMonthlyState(userId, mk);
@@ -42,12 +49,27 @@ export async function POST(req: Request) {
   const gap = daysSinceLastActivity(allHistory, now) ?? 0;
   const cooldown = isComebackOnCooldown(userId, mk, now);
 
+  // Combine all active event multipliers + active track multipliers.
+  const events = listActiveBonusEvents(userId, now);
+  let eventMultiplier = activeEventMultiplier(events, def.key);
+  const tracks = listActiveTrackEnrollments(userId, now);
+  for (const t of tracks) {
+    const track = TRACK_INDEX[t.trackKey];
+    if (track && track.behaviors.includes(def.key)) {
+      eventMultiplier *= track.trackMultiplier;
+    }
+  }
+
+  const firstWeekMultiplier = isInFirstWeek(user?.first_week_bonus_until ?? null, now) ? FIRST_WEEK_MULTIPLIER : 1;
+
   const result = awardForBehavior({
     behavior: def.key,
     loggedAt: now,
     monthHistory,
     daysSinceLastActivity: gap,
     comebackOnCooldown: cooldown,
+    eventMultiplier,
+    firstWeekMultiplier,
   });
 
   const row: LoggedBehavior = {

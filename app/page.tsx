@@ -8,11 +8,19 @@ import {
   getDailyPlan,
   getEveningLog,
   getUser,
+  listActiveBonusEvents,
+  listActiveTrackEnrollments,
   listBehaviorsAll,
   listBehaviorsForMonth,
 } from "@/lib/db";
+import { listOpenIntercepts } from "@/lib/bank";
 import { currentStreak, pointsToSEK, summarizeMonth } from "@/lib/points";
+import { describeEvent } from "@/lib/events";
+import { lifetimeLevel } from "@/lib/levels";
+import { isInFirstWeek } from "@/lib/onboarding";
+import { currentSeason } from "@/lib/seasons";
 import { dayKey, isBefore11am, monthKey } from "@/lib/time";
+import { TRACK_INDEX } from "@/lib/tracks";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +34,14 @@ function nextStreakThreshold(streak: number) {
 export default function Dashboard() {
   const userId = DEMO_USER_ID;
   const user = getUser(userId)!;
+
+  // If never onboarded, redirect-ish: surface onboarding CTA. We don't hard
+  // redirect — the demo seed marks `onboarded_at` already.
+  const tier = STAKE_TIERS[user.tier];
   const now = new Date();
   const mk = monthKey(now);
   ensureMonthlyState(userId, mk);
 
-  const tier = STAKE_TIERS[user.tier];
   const monthHistory = listBehaviorsForMonth(userId, mk);
   const allHistory = listBehaviorsAll(userId);
   const summary = summarizeMonth(monthHistory);
@@ -40,6 +51,12 @@ export default function Dashboard() {
   const nextRule = nextStreakThreshold(streak);
   const engagement = computeEngagement(allHistory, now);
   const decay = decayMessage(engagement.decayTier);
+  const events = listActiveBonusEvents(userId, now);
+  const tracks = listActiveTrackEnrollments(userId, now);
+  const intercepts = listOpenIntercepts(userId);
+  const level = lifetimeLevel(user.total_lifetime_points);
+  const season = currentSeason(now);
+  const inFirstWeek = isInFirstWeek(user.first_week_bonus_until, now);
 
   const today = dayKey(now);
   const plan = getDailyPlan(userId, today);
@@ -52,11 +69,31 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Good {timeOfDay(now)}, {user.name}.</h1>
           <p className="text-sm text-ink-300">
-            {tier.tier} tier · {tier.stakeSEK} SEK staked this month
+            {tier.tier} tier · {tier.stakeSEK} SEK staked · Level {level.level}
           </p>
         </div>
         <span className="pill">{streak}d streak</span>
       </header>
+
+      {inFirstWeek && (
+        <div className="card border-mint/40 bg-mint/5">
+          <p className="text-sm text-mint">First-week onboarding bonus active: 1.5× on everything, no stake charged yet.</p>
+        </div>
+      )}
+
+      {intercepts.length > 0 && (
+        <Link href="/bank" className="card block border-flame/40 bg-flame/5 hover:bg-flame/10">
+          <p className="text-sm text-flame">
+            {intercepts.length} pending bank intercept{intercepts.length === 1 ? "" : "s"} — cancel to keep the points.
+          </p>
+        </Link>
+      )}
+
+      {season && (
+        <Link href="/events" className="card block hover:bg-ink-700">
+          <p className="text-sm text-mint">{season.label} — {season.payload.description}</p>
+        </Link>
+      )}
 
       <section className="card">
         <div className="flex items-baseline justify-between">
@@ -87,6 +124,30 @@ export default function Dashboard() {
         <div className="card border-flame/40 bg-flame/5">
           <p className="text-sm text-flame">{decay}</p>
         </div>
+      )}
+
+      {events.length > 0 && (
+        <section className="card">
+          <h2 className="text-sm font-semibold text-ink-200">Active right now</h2>
+          <ul className="mt-2 space-y-1 text-sm text-mint">
+            {events.map((e) => (
+              <li key={e.id}>· {describeEvent(e)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {tracks.length > 0 && (
+        <section className="card">
+          <h2 className="text-sm font-semibold text-ink-200">Track enrolment</h2>
+          <ul className="mt-2 text-xs text-ink-300">
+            {tracks.map((t) => (
+              <li key={t.id}>
+                · {TRACK_INDEX[t.trackKey]?.title ?? t.trackKey} — ends {new Date(t.endsAt).toLocaleDateString()}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {morningOverdue && (

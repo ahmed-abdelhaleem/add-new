@@ -6,8 +6,11 @@ import { categorizeBrainDump } from "@/lib/ace";
 import {
   DEMO_USER_ID,
   ensureMonthlyState,
+  insertActionItem,
   insertBehavior,
   insertBrainDump,
+  insertCuriosity,
+  insertWishlistItem,
   isComebackOnCooldown,
   listBehaviorsAll,
   listBehaviorsForMonth,
@@ -17,11 +20,13 @@ import {
 } from "@/lib/db";
 import { awardForBehavior, daysSinceLastActivity } from "@/lib/points";
 import { monthKey } from "@/lib/time";
-import type { BrainDump, LoggedBehavior } from "@/lib/types";
+import type { BrainDump, LoggedBehavior, WishlistItem } from "@/lib/types";
 
 const schema = z.object({
   text: z.string().min(1).max(4000),
 });
+
+const COOLING_HOURS = 24;
 
 export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json());
@@ -44,6 +49,24 @@ export async function POST(req: Request) {
 
   const categorized = await categorizeBrainDump(parsed.data.text);
   updateBrainDumpCategorization(id, categorized);
+
+  // Fan out to the structured tables so the user can resolve / redeem later.
+  for (const a of categorized.actionItems) insertActionItem(userId, a, "brain_dump");
+  for (const c of categorized.curiosityQueue) insertCuriosity(userId, c, "brain_dump");
+  for (const w of categorized.wishlist) {
+    const item: WishlistItem = {
+      id: randomUUID(),
+      userId,
+      title: w,
+      category: "shopping",
+      costSEK: 0, // user fills in later
+      rate: "B",
+      addedAt: now.toISOString(),
+      cooledUntil: new Date(now.getTime() + COOLING_HOURS * 60 * 60 * 1000).toISOString(),
+      source: "brain_dump",
+    };
+    insertWishlistItem(item);
+  }
 
   // Award the brain_dump behavior, subject to its daily cap of 1.
   const monthHistory = listBehaviorsForMonth(userId, mk);
