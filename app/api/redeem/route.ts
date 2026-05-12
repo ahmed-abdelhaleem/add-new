@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { randomUUID } from "node:crypto";
+
 import { VAULT_INDEX } from "@/lib/catalog";
 import {
   DEMO_USER_ID,
   ensureMonthlyState,
   getMonthlyState,
+  insertMemoryCard,
   insertRedemption,
   recordSpend,
 } from "@/lib/db";
@@ -55,5 +58,24 @@ export async function POST(req: Request) {
     rate: item.rate as "A" | "B",
   });
 
+  // PRD §5 Feature 6 — write a Memory card for experience-grade redemptions.
+  if (item.rate === "A") {
+    insertMemoryCard(userId, {
+      id: randomUUID(),
+      itemId: item.id,
+      title: item.title,
+      caption: monthLabel(mk),
+      monthKey: mk,
+      imageHint: item.imageHint,
+      redeemedAt: new Date().toISOString(),
+    });
+  }
+
   return NextResponse.json({ id, pointsSpent: cost, remaining: available - cost });
+}
+
+function monthLabel(mk: string): string {
+  const [y, m] = mk.split("-").map((s) => parseInt(s, 10));
+  const date = new Date(y, m - 1, 1);
+  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 }

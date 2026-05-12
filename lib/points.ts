@@ -73,15 +73,17 @@ export function awardForBehavior(input: AwardInput): AwardResult {
     }
   }
 
-  // Monthly domain cap.
+  // Monthly domain cap. Foundation Mode behaviors are uncapped because
+  // they're gated by mode activation rather than a points ceiling.
   const domain = def.domain;
-  const domainCap = DOMAIN_CAP_INDEX[domain];
+  const hasCap = domain in DOMAIN_CAP_INDEX;
+  const domainCap = hasCap ? DOMAIN_CAP_INDEX[domain as keyof typeof DOMAIN_CAP_INDEX] : Infinity;
   const domainSpent = input.monthHistory
     .filter((h) => BEHAVIOR_INDEX[h.behavior]?.domain === domain)
     .reduce((sum, h) => sum + h.awardedPoints, 0);
 
-  const remainingDomain = Math.max(0, domainCap - domainSpent);
-  if (remainingDomain <= 0) {
+  const remainingDomain = hasCap ? Math.max(0, domainCap - domainSpent) : Infinity;
+  if (hasCap && remainingDomain <= 0) {
     reasons.push(`Monthly cap reached for ${domain}`);
     return {
       rawPoints: def.points,
@@ -183,6 +185,8 @@ export function summarizeMonth(history: LoggedBehavior[]): {
     mental: 0,
     social: 0,
     regulation: 0,
+    foundation: 0,
+    nourish: 0,
   };
   let total = 0;
   for (const h of history) {

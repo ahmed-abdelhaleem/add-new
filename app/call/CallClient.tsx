@@ -2,29 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import type { SpeechRecognitionLike } from "@/lib/speech";
 import type { AccountabilityCall } from "@/lib/types";
 
 type Turn = { role: "user" | "ace"; text: string; at: string };
-
-// Minimal Web Speech API typings so we don't pull in DOM-vendor types.
-type SpeechRecognitionLike = {
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }>>; resultIndex: number }) => void) | null;
-  onerror: ((ev: { error: string }) => void) | null;
-  onend: (() => void) | null;
-};
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  }
-}
 
 export default function CallClient({ initialCalls }: { initialCalls: AccountabilityCall[] }) {
   const [recognizing, setRecognizing] = useState(false);

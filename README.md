@@ -1,73 +1,79 @@
 # MOMENTUM
 
 AI-powered behavioral consistency engine with real-money gamification.
-Working web implementation of the MOMENTUM PRD.
+Working web implementation of MOMENTUM Master PRD v2.0.
 
-## What's implemented
+## Scope
 
-All design surfaces from the PRD that can be built in code without
-external integrations live behind real APIs and persistence. The
-external-service edges (Stripe/Swish, PSD2, HealthKit, GPS verification,
-email, voice TTS, scheduled cron) are isolated behind named modules
-with `TODO(integration:*)` comments documenting exactly what each one
-needs.
+Every PRD surface that can be built in code now exists with real APIs
+and persistence. External-service edges (Stripe/Swish, PSD2, HealthKit,
+GPS verification, email, voice TTS, scheduled cron, store deal scrapers)
+are isolated behind named modules with `TODO(integration:*)` comments.
 
-### Features (52 routes, 9 server modules, 18 lib modules)
+### v2 additions (this build)
 
-- **Points economy** (PRD §4): 4 stake tiers, 20 capped behaviors,
-  streak multipliers (1.2/1.4/1.6×), 3× comeback bonus with 14-day
-  cooldown, month-end bonuses, Category A/B redemption split,
-  first-week 1.5× onboarding bonus, event multipliers compounding with
-  track + seasonal multipliers.
-- **ACE** (Claude API): tone-constrained system prompt, brain-dump
-  categorizer, accountability-call replies. Local deterministic
-  fallback when `ANTHROPIC_API_KEY` is unset.
-- **Decay detection**: 28-day baseline vs 7-day rolling, 3/5/7/10
-  escalation tiers, automatic Rescue Week.
-- **Onboarding** (§9): 7 conversational questions, charity last,
-  first-week comp, tier auto-selected from stake.
-- **Daily architecture**: morning energy + commitment + 3 priorities;
-  evening close-out always awards show-up points.
-- **Brain Dump → fan-out**: action items, curiosity queue, wishlist
-  (24-h cooling), anxious-acknowledged.
-- **Experience Vault + Wishlist**: curated catalog + user-added items
-  with cooling and category-B penalty.
-- **Bonus events**: Double Points Hour, Challenge Drop, Rescue Week,
-  Seasonal Events. Manual triggers in `/events`; production runs from
-  a cron.
-- **Challenge Tracks**: 5 rotating 3-week themed programs with track
-  multiplier on enrolled behaviors.
-- **Community Challenges**: opt-in anonymous leaderboard with
-  participation count.
-- **Level system**: 1–50 lifetime-points levels with unlocks at
-  5/10/15/20/25/30/40/50.
-- **Accountability Partner**: invite + verify (stub), weekly digest
-  preview, 1,000-pt one-tap boost.
-- **AI Accountability Call**: 5-min voice check-in using the browser's
-  Web Speech API (recognition + synthesis); awards 1,500 bonus pts.
-- **Pattern Insight Reports**: monthly behavioral summaries via ACE
-  (or local fallback), backed by `monthly_reports` table.
-- **Mood + medication logs**: private, surfaced as 12-week heatmap.
-- **Health integration**: provider connect/disconnect, manual sample
-  entry. Wire `apple_health` / `google_fit` / `garmin` / `fitbit` on
-  the mobile shell.
-- **Bank integration**: PSD2 connect/disconnect, simulated incoming
-  transactions for the impulse interception UX. Cancelling a
-  detected delivery transaction awards the `no_delivery_today` points
-  immediately.
-- **Stake & Payments**: Swish/Stripe stub `chargeMonthlyStake` +
-  `disburseToCharity`. Yearly summary (charged / recovered / donated).
-- **Settings, History (activity + mood heatmap), Level page,
-  Curiosity Queue, Action Items, More-page directory.**
-- **Anti-gaming verification stubs**: GPS-bounded gym verification,
-  food-photo verification (vision), manual-step daily cap (500 pts).
+- **Feature 10 — Foundation Mode**: 6-month readiness protocol.
+  Activation with written commitment, +500 SEK stake surcharge,
+  one-tap urge interception ("Urge hit" → +800 pts + 10-min timer +
+  ACE check-in), redirect menu (time-of-day + energy aware,
+  +0–1,500 pts on completion), weekly Readiness Score (0–100 across
+  4 pillars at 25% each, narrated as Foundation/Building/Momentum/
+  Ready), 72-hour reflection window for deactivation.
+- **Feature 11 — NourishPlan**: 4 sub-views (Today, Plan, Shop,
+  Deals). Energy forecast → 3 options per slot → confirmation
+  (+600 pts). Shopping list auto-generated, pantry-aware, 1–2 days
+  only, exact quantities, grouped by section. One-tap send to ICA /
+  Coop / Mathem (stubbed). Separate meal streak counter (decoupled
+  from main streak) with 3-day (+1,500) and 7-day (+4,000)
+  milestones. Static deal seed for ICA/Coop/Lidl/Willys; suggestions
+  already incorporate deals so users never browse.
+- **Section 7 — Notification System**: 4 types (Anchor, Moment,
+  Surprise, Rescue), hard frequency caps (≤2/day, ≤8/week, 3-hour
+  minimum gap, 21:30–08:00 quiet hours, 0 on days the user opened
+  the app 2+ times), banned-phrase guards, copy-test enforcement,
+  granular opt-down per type, full dispatch + history UI.
+- **Dashboard upgrades**: 95% ring cap with "on track" until
+  month-end (PRD §6.3); live CSS streak flame that scales with
+  streak length and turns amber-red when at-risk; Live Feed Strip;
+  near-miss labels ("X pts to Level Y"); NourishPlan status badge;
+  "You're X pts away from Y" wishlist preview; Foundation Readiness
+  card; shimmering priority action cards.
+- **Memory Gallery**: every Category-A Vault redemption now writes a
+  permanent memory card.
+- **Floating Brain Dump button**: persistent on every screen,
+  full-screen overlay, slow-blinking cursor (PRD §6.5), Web Speech
+  voice input, 8-second idle "Done? Save & close" prompt.
+- **Morning check-in NourishPlan question**: "Did you eat roughly
+  as planned yesterday?" (+400 pts for any answer).
+- **Design palette**: refreshed to warm gold (#C9962A) + amber
+  (#E8C882) with `breathe` / `shimmer` / `flame` / `rollUp`
+  animations.
+- **ACE tone constraints**: now reject "bad", "unhealthy",
+  "inappropriate", "failure", "wrong", and any exclamation mark.
+  Foundation Mode framing and post-bariatric NourishPlan rules
+  encoded in the system prompt.
+- **Anti-gaming**: existing GPS, photo, manual-step verification
+  stubs unchanged; bank-account tracking flagged in `lib/bank.ts`.
+
+### v1 still in place
+
+- Points economy (4 stake tiers, behaviors, caps, streaks, comeback,
+  first-week 1.5×), ACE chat, decay detection, daily architecture,
+  Vault, Wishlist, Curiosity Queue, Action Items, Mood + medication,
+  Health stubs, Bank intercept simulator, Payments stub, Accountability
+  partner + boost, Voice accountability call, Challenge tracks,
+  Community challenges, Seasonal events, Pattern Insight Reports,
+  Level system, History heatmap.
 
 ### Tests
 
-46 Vitest cases across the points engine, onboarding, levels, event
-multiplier composition, seasons, heatmap, verification stubs,
-accountability digest, payments helpers, and the first-week multiplier
-integration in `awardForBehavior`.
+77 Vitest cases across the points engine math (§4), onboarding,
+levels, event-multiplier composition, seasons, verification stubs,
+accountability digest, payments helpers, Foundation Mode readiness
++ phases + deactivation timer, NourishPlan suggestions / streak /
+shopping-list dedup / plan-vs-delivery, notification copy tests +
+quiet hours + banned phrases, near-miss labels, Live Feed shape and
+relative-time formatting.
 
 ```bash
 npm install
@@ -76,15 +82,15 @@ npm run build
 npm run dev    # http://localhost:3000
 ```
 
-A demo user (`Saeed`, Standard tier, 1000 SEK stake, Läkare Utan Gränser)
-is seeded on first boot. Visit `/onboarding` to re-run the conversational
-intake.
+A demo user (`Saeed`, Standard tier, 1000 SEK stake, Läkare Utan
+Gränser) is seeded on first boot. Visit `/onboarding` to re-run the
+conversational intake.
 
-## What's not implemented (TODO markers in code)
+## What's still external
 
 Every external-integration surface is gated behind a module that
 exports a stubbed function with a `TODO(integration:*)` comment
-listing the production work:
+listing exactly the production work:
 
 | Module | TODO key | What's missing |
 |---|---|---|
@@ -101,13 +107,17 @@ listing the production work:
 | `lib/verification.ts` | `food_photo` | Claude vision call on uploaded meal photos. |
 | `lib/verification.ts` | `partner_verify` | Tokenized email verification. |
 | `lib/accountability.ts` | `email` | Resend / Postmark scheduled digest. |
-| `lib/call/route.ts` | `tts` | ElevenLabs / Cartesia for server-side TTS. |
+| `app/api/call/route.ts` | `tts` | ElevenLabs / Cartesia for server-side TTS. |
 | `app/api/events/route.ts` | `scheduler` | Inngest / Trigger.dev / Vercel Cron. |
 | `app/api/onboarding/route.ts` | `cron` | Monthly stake-charge scheduler. |
+| `lib/nourish.ts` | `deals` | ICA / Coop / Lidl / Willys deal scraper. |
+| `app/api/nourish/shop/route.ts` | `delivery` | ICA, Coop, Mathem cart API. |
+| `lib/notifications.ts` | `push` | Web Push + VAPID; APNs/FCM on native. |
+| `app/api/foundation/readiness/route.ts` | `therapy` | Therapy attendance log integration. |
 
-Mobile shells (iOS, Android) are out of scope of this web build but the
-business logic is provider-agnostic and ready to back a React Native
-client.
+Mobile shells (iOS, Android) are out of scope of this web build but
+all business logic is provider-agnostic and ready to back a React
+Native client.
 
 ## Environment
 
@@ -121,25 +131,31 @@ MOMENTUM_DB_PATH=          # defaults to ./momentum.db
 
 ```
 app/
-  page.tsx                  Dashboard (decay + events + intercepts + level)
-  more/                     Directory page (links to all 17 surfaces)
+  page.tsx                  Dashboard (95% cap, flame, feed, badges)
+  more/                     Directory of every surface
   onboarding/               7-question conversational intake
-  morning/ evening/         Daily architecture
-  log/ dump/                Behavior logger + Brain Dump
+  morning/ evening/         Daily architecture (with Nourish question)
+  log/ dump/                Behavior logger + dedicated brain dump page
   ace/                      ACE chat
   call/                     Voice accountability call (Web Speech API)
   vault/ wishlist/          Redemption surfaces
+  memory/                   Memory Gallery
   curiosity/ actions/       Brain-dump fan-out
-  mood/ health/             Wellbeing logs + integrations
+  mood/ health/             Wellbeing + integrations
   bank/ payments/           Money flows
   partner/ community/       Accountability layer
   tracks/ events/ reports/  Novelty engine + insights
+  foundation/               Foundation Mode (Feature 10)
+  nourish/                  NourishPlan (Feature 11), 4 tabs
+  notifications/            Section 7 control panel
   level/ settings/ history/ Misc
+  components/FloatingDump   Persistent brain-dump button
   api/                      All POST/PATCH/PUT/DELETE handlers
 lib/
-  economy.ts points.ts      §4 catalog + math
+  economy.ts                Stake tiers, behavior catalog, caps, multipliers
+  points.ts                 Award math (incl. first-week, event mult)
   decay.ts events.ts        Decay detection + event multipliers (pure)
-  event-actions.ts          Server-only event generators (DB writes)
+  event-actions.ts          Server-only event generators
   ace.ts reports.ts         Claude integrations
   tracks.ts seasons.ts      Novelty engine data
   levels.ts heatmap.ts      Level math, calendar visualizations
@@ -149,9 +165,15 @@ lib/
   verification.ts           Anti-gaming stubs (GPS, photo, manual caps)
   accountability.ts         Weekly digest builder
   catalog.ts                Curated Vault items
-  db.ts                     SQLite schema + accessors (better-sqlite3)
+  foundation.ts             Readiness score, redirect menu (PRD §10)
+  nourish.ts                Meal options, plan/shop/streak math
+  notifications.ts          4 types, caps, copy generators, banned phrases
+  feed.ts                   Live Feed Strip builder
+  speech.d.ts               Web Speech API shared types
+  db.ts                     SQLite schema + accessors
   time.ts types.ts          Shared helpers
 tests/
-  points.test.ts            §4 math
-  extras.test.ts            All new modules
+  points.test.ts            §4 math (18 cases)
+  extras.test.ts            v1 modules (28 cases)
+  v2.test.ts                v2 modules (31 cases)
 ```

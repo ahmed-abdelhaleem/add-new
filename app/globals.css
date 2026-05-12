@@ -8,8 +8,8 @@
 
 html,
 body {
-  background: #0a0a0b;
-  color: #ececf1;
+  background: #0F0E0C;
+  color: #F0EBE0;
   min-height: 100%;
 }
 
@@ -28,13 +28,62 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-colors;
   }
   .btn-primary {
-    @apply btn bg-flame text-ink-900 hover:bg-flame-dim hover:text-ink-100;
+    @apply btn bg-gold text-ink-900 hover:bg-amber;
   }
   .btn-ghost {
     @apply btn bg-ink-700 text-ink-100 hover:bg-ink-600;
   }
+  .btn-danger {
+    @apply btn bg-flame text-ink-100 hover:bg-flame-dim;
+  }
+  /* PRD §6.3 — Live shimmer on incomplete cards. */
+  .shimmer {
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      rgba(232, 200, 130, 0.10) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+  /* PRD §6.5 — Brain Dump cursor blinks slower than standard. */
+  .dump-cursor {
+    caret-color: #C9962A;
+    animation: dump-cursor-blink 1.6s steps(1) infinite;
+  }
+  @keyframes dump-cursor-blink {
+    50% { caret-color: transparent; }
+  }
 }
 
 input[type="range"] {
-  accent-color: #ff5d3b;
+  accent-color: #C9962A;
+}
+
+/* PRD §6.3 — Streak Flame, live CSS animation. Size + intensity scales
+   via the `--flame-scale` custom property set inline on the element. */
+.streak-flame {
+  position: relative;
+  display: inline-block;
+  width: calc(20px * var(--flame-scale, 1));
+  height: calc(28px * var(--flame-scale, 1));
+}
+.streak-flame::before,
+.streak-flame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at bottom, #E8C882, #C9962A 60%, transparent 80%);
+  border-radius: 50% 50% 35% 35% / 60% 60% 40% 40%;
+  animation: flamePulse 1.6s ease-in-out infinite;
+}
+.streak-flame::after {
+  inset: 25%;
+  background: radial-gradient(ellipse at bottom, #FFE6B8, #E8C882 60%, transparent 80%);
+  animation-delay: 0.3s;
+}
+.streak-flame.at-risk::before,
+.streak-flame.at-risk::after {
+  background: radial-gradient(ellipse at bottom, #E8A982, #C45A2A 60%, transparent 80%);
 }
