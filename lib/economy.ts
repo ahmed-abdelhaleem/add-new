@@ -15,6 +15,9 @@ export const STAKE_TIERS: Record<StakeTier, StakeTierConfig> = {
   "All-in": { tier: "All-in", stakeSEK: 5000, maxRecoverableSEK: 5000, maxWithBonusesSEK: 9000 },
 };
 
+// PRD §4.1 — Foundation Mode adds 500 SEK/month surcharge.
+export const FOUNDATION_STAKE_SURCHARGE_SEK = 500;
+
 // PRD §4.2 — 100 points = 1 SEK
 export const POINTS_PER_SEK = 100;
 export const REDUCED_POINTS_PER_SEK = 180; // Category B (44% penalty)
@@ -138,13 +141,6 @@ export const BEHAVIORS: BehaviorDefinition[] = [
 
   // Self-Regulation (max 15,000 pts/month)
   {
-    key: "home_cooked_meal",
-    domain: "regulation",
-    label: "Home-cooked meal",
-    points: 600,
-    notes: "Self-log",
-  },
-  {
     key: "no_delivery_today",
     domain: "regulation",
     label: "No food delivery today",
@@ -176,25 +172,105 @@ export const BEHAVIORS: BehaviorDefinition[] = [
     notes: "Bank integration",
     dailyCap: 1,
   },
+
+  // Foundation Mode (only when active — PRD §4.3 Domain 5)
+  {
+    key: "trigger_logged",
+    domain: "foundation",
+    label: "Trigger logged (urge intercepted)",
+    points: 800,
+    notes: "One tap. 10-min timer + ACE check-in.",
+  },
+  {
+    key: "redirect_completed",
+    domain: "foundation",
+    label: "Redirect completed after trigger",
+    points: 1200,
+    notes: "Logged alternative behavior",
+  },
+  {
+    key: "readiness_score_weekly",
+    domain: "foundation",
+    label: "Weekly readiness score recorded",
+    points: 2000,
+    notes: "Auto-awarded once per week",
+    dailyCap: 1,
+  },
+  {
+    key: "foundation_month_complete",
+    domain: "foundation",
+    label: "Foundation Mode month complete",
+    points: 15000,
+    notes: "Awarded automatically",
+  },
+
+  // NourishPlan (max 20,000 pts/month — PRD §4.3 Domain 6 + §5 Feature 11)
+  {
+    key: "meal_plan_created",
+    domain: "nourish",
+    label: "Meal plan created",
+    points: 600,
+    notes: "Evening planning flow",
+    dailyCap: 1,
+  },
+  {
+    key: "shopped_as_planned",
+    domain: "nourish",
+    label: "Shopped as planned",
+    points: 800,
+    notes: "Delivery confirmation or self-log",
+    dailyCap: 1,
+  },
+  {
+    key: "ate_as_planned",
+    domain: "nourish",
+    label: "Ate as planned",
+    points: 500,
+    notes: "Morning check-in: yes / partly / no",
+    dailyCap: 1,
+  },
+  {
+    key: "meal_streak_3",
+    domain: "nourish",
+    label: "3-day meal streak bonus",
+    points: 1500,
+    notes: "Auto-calculated",
+  },
+  {
+    key: "meal_streak_7",
+    domain: "nourish",
+    label: "7-day meal streak bonus",
+    points: 4000,
+    notes: "Auto-calculated",
+  },
+  {
+    key: "home_cooked_meal",
+    domain: "nourish",
+    label: "Home-cooked meal logged",
+    points: 600,
+    notes: "Self-log with optional photo",
+  },
 ];
 
 export const BEHAVIOR_INDEX: Record<BehaviorKey, BehaviorDefinition> = Object.fromEntries(
   BEHAVIORS.map((b) => [b.key, b])
 ) as Record<BehaviorKey, BehaviorDefinition>;
 
-// PRD §4.3 — domain monthly caps
+// PRD §4.3 — domain monthly caps. Foundation Mode points are uncapped
+// because they're gated by mode activation.
 export const DOMAIN_CAPS: DomainCap[] = [
   { domain: "physical", monthlyCap: 35000 },
   { domain: "mental", monthlyCap: 25000 },
   { domain: "social", monthlyCap: 20000 },
   { domain: "regulation", monthlyCap: 15000 },
+  { domain: "nourish", monthlyCap: 20000 },
 ];
 
-export const DOMAIN_CAP_INDEX: Record<Exclude<Domain, "consistency">, number> = Object.fromEntries(
+export const DOMAIN_CAP_INDEX: Record<Exclude<Domain, "consistency" | "foundation">, number> = Object.fromEntries(
   DOMAIN_CAPS.map((d) => [d.domain, d.monthlyCap])
-) as Record<Exclude<Domain, "consistency">, number>;
+) as Record<Exclude<Domain, "consistency" | "foundation">, number>;
 
-// PRD §4.3 Domain 5 — streak multipliers
+// PRD §4.4 Domain 5 — streak multipliers (renamed in v2 to "Consistency Multipliers")
 export interface StreakRule {
   days: number;
   multiplier: number;
@@ -211,9 +287,13 @@ export const MONTH_BONUSES = {
   monthCompletedNoZeroDays: 25000,
 };
 
-// Anti-gaming: manual step entries capped at 500 pts/day (PRD §7).
+// Anti-gaming: manual step entries capped at 500 pts/day (PRD §9).
 export const MANUAL_STEPS_DAILY_CAP_POINTS = 500;
 
-// PRD §7 — comeback bonus once per 14-day period
+// PRD §9 — comeback bonus once per 14-day period
 export const COMEBACK_BONUS_COOLDOWN_DAYS = 14;
 export const COMEBACK_BONUS_MULTIPLIER = 3;
+
+// PRD §6.3 — dashboard ring never shows 100% until month end; clamps to 95%
+// with "on track" label until the last day.
+export const STAKE_RING_PRE_MONTHEND_CAP_PCT = 95;

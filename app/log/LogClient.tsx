@@ -12,6 +12,8 @@ const DOMAIN_LABELS: Record<DomainKey, string> = {
   mental: "Mental & Learning",
   social: "Social & Engagement",
   regulation: "Self-Regulation",
+  foundation: "Foundation Mode",
+  nourish: "NourishPlan",
 };
 
 interface LastAward {
@@ -48,9 +50,10 @@ export default function LogClient({ behaviors }: { behaviors: BehaviorDefinition
   };
 
   const grouped = behaviors.reduce<Record<DomainKey, BehaviorDefinition[]>>((acc, b) => {
-    (acc[b.domain] ??= []).push(b);
+    if (!acc[b.domain]) acc[b.domain] = [];
+    acc[b.domain].push(b);
     return acc;
-  }, { physical: [], mental: [], social: [], regulation: [] });
+  }, { physical: [], mental: [], social: [], regulation: [], foundation: [], nourish: [] });
 
   return (
     <div className="space-y-6">

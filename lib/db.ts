@@ -18,17 +18,28 @@ import type {
   CuriosityItem,
   DailyPlan,
   EveningLog,
+  FoundationModeState,
   HealthSample,
   LoggedBehavior,
+  MealLog,
+  MealPlan,
   MedicationLog,
+  MemoryCard,
   MonthlyReport,
   MonthlyState,
   MoodLog,
+  NotificationPrefs,
+  NotificationRecord,
+  NotificationType,
   OnboardingAnswers,
+  PantryItem,
   PartnerBoost,
   Payment,
+  ReadinessScore,
+  ShoppingList,
   StakeTier,
   TrackEnrollment,
+  TriggerLog,
   WishlistItem,
 } from "./types";
 
@@ -329,6 +340,127 @@ function migrate(db: Database.Database) {
       charity TEXT NOT NULL,
       status TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Foundation Mode (PRD §5 Feature 10)
+    CREATE TABLE IF NOT EXISTS foundation_mode (
+      user_id TEXT PRIMARY KEY,
+      activated_at TEXT NOT NULL,
+      duration_days INTEGER NOT NULL DEFAULT 180,
+      commitment TEXT NOT NULL,
+      original_stake_sek INTEGER NOT NULL,
+      surcharge_sek INTEGER NOT NULL DEFAULT 500,
+      deactivation_started_at TEXT,
+      deactivated_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS trigger_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      logged_at TEXT NOT NULL,
+      emotion_underneath TEXT,
+      energy_level INTEGER,
+      redirect_chosen TEXT,
+      redirect_completed_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_trigger_logs_user ON trigger_logs(user_id, logged_at);
+
+    CREATE TABLE IF NOT EXISTS readiness_scores (
+      user_id TEXT NOT NULL,
+      week_key TEXT NOT NULL,
+      physical REAL NOT NULL,
+      mental REAL NOT NULL,
+      social REAL NOT NULL,
+      regulation REAL NOT NULL,
+      total REAL NOT NULL,
+      phase TEXT NOT NULL,
+      computed_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, week_key),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- NourishPlan (PRD §5 Feature 11)
+    CREATE TABLE IF NOT EXISTS meal_plans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      energy_forecast TEXT NOT NULL,
+      breakfast_id TEXT NOT NULL,
+      lunch_id TEXT NOT NULL,
+      dinner_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, date);
+
+    CREATE TABLE IF NOT EXISTS meal_logs (
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      slot TEXT NOT NULL,
+      ate_as_planned INTEGER,
+      delivery_ordered INTEGER NOT NULL DEFAULT 0,
+      logged_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, date, slot),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS shopping_lists (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      items TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      sent_to TEXT,
+      sent_at TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS pantry (
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, name),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Notifications (PRD §7)
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      opened_at TEXT,
+      dismissed_at TEXT,
+      payload TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, sent_at);
+
+    CREATE TABLE IF NOT EXISTS notification_prefs (
+      user_id TEXT PRIMARY KEY,
+      anchor_enabled INTEGER NOT NULL DEFAULT 1,
+      anchor_time TEXT NOT NULL DEFAULT '08:30',
+      moments_enabled INTEGER NOT NULL DEFAULT 1,
+      surprises_enabled INTEGER NOT NULL DEFAULT 1,
+      rescue_enabled INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Memory Gallery (PRD §5 Feature 6)
+    CREATE TABLE IF NOT EXISTS memory_gallery (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      caption TEXT NOT NULL,
+      month_key TEXT NOT NULL,
+      image_hint TEXT NOT NULL,
+      redeemed_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
   `);
@@ -1206,4 +1338,404 @@ export function listCharityDisbursements(userId: string): CharityDisbursement[] 
          FROM charity_disbursements WHERE user_id = ? ORDER BY created_at DESC`
     )
     .all(userId) as CharityDisbursement[];
+}
+
+// ── Foundation Mode ────────────────────────────────────────────────
+
+export function getFoundation(userId: string): FoundationModeState | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT user_id as userId, activated_at as activatedAt, duration_days as durationDays,
+              commitment, original_stake_sek as originalStakeSEK, surcharge_sek as surchargeSEK,
+              deactivation_started_at as deactivationStartedAt, deactivated_at as deactivatedAt
+         FROM foundation_mode WHERE user_id = ?`
+    )
+    .get(userId) as FoundationModeState | undefined;
+  return row;
+}
+
+export function activateFoundation(opts: {
+  userId: string;
+  commitment: string;
+  originalStakeSEK: number;
+  surchargeSEK: number;
+  durationDays?: number;
+}): FoundationModeState {
+  const at = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT OR REPLACE INTO foundation_mode
+        (user_id, activated_at, duration_days, commitment, original_stake_sek, surcharge_sek,
+         deactivation_started_at, deactivated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`
+    )
+    .run(
+      opts.userId,
+      at,
+      opts.durationDays ?? 180,
+      opts.commitment,
+      opts.originalStakeSEK,
+      opts.surchargeSEK
+    );
+  return getFoundation(opts.userId)!;
+}
+
+export function startFoundationDeactivation(userId: string) {
+  getDb()
+    .prepare(`UPDATE foundation_mode SET deactivation_started_at = ? WHERE user_id = ?`)
+    .run(new Date().toISOString(), userId);
+}
+
+export function completeFoundationDeactivation(userId: string) {
+  getDb()
+    .prepare(`UPDATE foundation_mode SET deactivated_at = ? WHERE user_id = ?`)
+    .run(new Date().toISOString(), userId);
+}
+
+export function insertTriggerLog(userId: string, log: TriggerLog) {
+  getDb()
+    .prepare(
+      `INSERT INTO trigger_logs (id, user_id, logged_at, emotion_underneath, energy_level, redirect_chosen, redirect_completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      log.id,
+      userId,
+      log.loggedAt,
+      log.emotionUnderneath,
+      log.energyLevel,
+      log.redirectChosen,
+      log.redirectCompletedAt
+    );
+}
+
+export function updateTriggerLog(id: string, patch: Partial<TriggerLog>) {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (patch.emotionUnderneath !== undefined) {
+    fields.push("emotion_underneath = ?");
+    values.push(patch.emotionUnderneath);
+  }
+  if (patch.energyLevel !== undefined) {
+    fields.push("energy_level = ?");
+    values.push(patch.energyLevel);
+  }
+  if (patch.redirectChosen !== undefined) {
+    fields.push("redirect_chosen = ?");
+    values.push(patch.redirectChosen);
+  }
+  if (patch.redirectCompletedAt !== undefined) {
+    fields.push("redirect_completed_at = ?");
+    values.push(patch.redirectCompletedAt);
+  }
+  if (fields.length === 0) return;
+  values.push(id);
+  getDb().prepare(`UPDATE trigger_logs SET ${fields.join(", ")} WHERE id = ?`).run(...(values as never[]));
+}
+
+export function listTriggerLogs(userId: string, limit = 200): TriggerLog[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, logged_at as loggedAt, emotion_underneath as emotionUnderneath,
+              energy_level as energyLevel, redirect_chosen as redirectChosen,
+              redirect_completed_at as redirectCompletedAt
+         FROM trigger_logs WHERE user_id = ? ORDER BY logged_at DESC LIMIT ?`
+    )
+    .all(userId, limit) as TriggerLog[];
+  return rows;
+}
+
+export function upsertReadinessScore(userId: string, s: ReadinessScore) {
+  getDb()
+    .prepare(
+      `INSERT INTO readiness_scores (user_id, week_key, physical, mental, social, regulation, total, phase, computed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, week_key) DO UPDATE SET
+         physical = excluded.physical, mental = excluded.mental,
+         social = excluded.social, regulation = excluded.regulation,
+         total = excluded.total, phase = excluded.phase, computed_at = excluded.computed_at`
+    )
+    .run(userId, s.weekKey, s.physical, s.mental, s.social, s.regulation, s.total, s.phase, s.computedAt);
+}
+
+export function listReadinessScores(userId: string): ReadinessScore[] {
+  return getDb()
+    .prepare(
+      `SELECT week_key as weekKey, physical, mental, social, regulation, total, phase, computed_at as computedAt
+         FROM readiness_scores WHERE user_id = ? ORDER BY week_key ASC`
+    )
+    .all(userId) as ReadinessScore[];
+}
+
+// ── NourishPlan ────────────────────────────────────────────────────
+
+export function insertMealPlan(p: MealPlan) {
+  getDb()
+    .prepare(
+      `INSERT INTO meal_plans (id, user_id, date, energy_forecast, breakfast_id, lunch_id, dinner_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(p.id, p.userId, p.date, p.energyForecast, p.breakfastId, p.lunchId, p.dinnerId, p.createdAt);
+}
+
+export function getMealPlanForDate(userId: string, date: string): MealPlan | undefined {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, date, energy_forecast as energyForecast,
+              breakfast_id as breakfastId, lunch_id as lunchId, dinner_id as dinnerId,
+              created_at as createdAt
+         FROM meal_plans WHERE user_id = ? AND date = ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(userId, date) as MealPlan | undefined;
+}
+
+export function listMealPlans(userId: string, limit = 30): MealPlan[] {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, date, energy_forecast as energyForecast,
+              breakfast_id as breakfastId, lunch_id as lunchId, dinner_id as dinnerId,
+              created_at as createdAt
+         FROM meal_plans WHERE user_id = ? ORDER BY date DESC LIMIT ?`
+    )
+    .all(userId, limit) as MealPlan[];
+}
+
+export function upsertMealLog(userId: string, log: MealLog) {
+  getDb()
+    .prepare(
+      `INSERT INTO meal_logs (user_id, date, slot, ate_as_planned, delivery_ordered, logged_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, date, slot) DO UPDATE SET
+         ate_as_planned = excluded.ate_as_planned,
+         delivery_ordered = excluded.delivery_ordered,
+         logged_at = excluded.logged_at`
+    )
+    .run(
+      userId,
+      log.date,
+      log.slot,
+      log.ateAsPlanned == null ? null : log.ateAsPlanned ? 1 : 0,
+      log.deliveryOrdered ? 1 : 0,
+      log.loggedAt
+    );
+}
+
+export function listMealLogs(userId: string, since?: string): MealLog[] {
+  const rows = (since
+    ? getDb()
+        .prepare(
+          `SELECT date, slot, ate_as_planned as ateAsPlanned, delivery_ordered as deliveryOrdered, logged_at as loggedAt
+             FROM meal_logs WHERE user_id = ? AND date >= ? ORDER BY date DESC, slot`
+        )
+        .all(userId, since)
+    : getDb()
+        .prepare(
+          `SELECT date, slot, ate_as_planned as ateAsPlanned, delivery_ordered as deliveryOrdered, logged_at as loggedAt
+             FROM meal_logs WHERE user_id = ? ORDER BY date DESC, slot`
+        )
+        .all(userId)) as Array<{
+    date: string;
+    slot: string;
+    ateAsPlanned: number | null;
+    deliveryOrdered: number;
+    loggedAt: string;
+  }>;
+  return rows.map((r) => ({
+    date: r.date,
+    slot: r.slot as MealLog["slot"],
+    ateAsPlanned: r.ateAsPlanned == null ? null : r.ateAsPlanned === 1,
+    deliveryOrdered: r.deliveryOrdered === 1,
+    loggedAt: r.loggedAt,
+  }));
+}
+
+export function insertShoppingList(s: ShoppingList) {
+  getDb()
+    .prepare(
+      `INSERT INTO shopping_lists (id, user_id, plan_id, items, created_at, sent_to, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(s.id, s.userId, s.planId, JSON.stringify(s.items), s.createdAt, s.sentTo, s.sentAt);
+}
+
+export function getShoppingListForPlan(planId: string): ShoppingList | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, plan_id as planId, items, created_at as createdAt,
+              sent_to as sentTo, sent_at as sentAt
+         FROM shopping_lists WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`
+    )
+    .get(planId) as
+    | { id: string; userId: string; planId: string; items: string; createdAt: string; sentTo: string | null; sentAt: string | null }
+    | undefined;
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    userId: row.userId,
+    planId: row.planId,
+    items: JSON.parse(row.items),
+    createdAt: row.createdAt,
+    sentTo: row.sentTo as ShoppingList["sentTo"],
+    sentAt: row.sentAt,
+  };
+}
+
+export function updateShoppingListItems(id: string, items: ShoppingList["items"]) {
+  getDb().prepare(`UPDATE shopping_lists SET items = ? WHERE id = ?`).run(JSON.stringify(items), id);
+}
+
+export function markShoppingListSent(id: string, sentTo: NonNullable<ShoppingList["sentTo"]>) {
+  getDb()
+    .prepare(`UPDATE shopping_lists SET sent_to = ?, sent_at = ? WHERE id = ?`)
+    .run(sentTo, new Date().toISOString(), id);
+}
+
+export function addPantryItem(userId: string, name: string) {
+  getDb()
+    .prepare(`INSERT OR IGNORE INTO pantry (user_id, name, added_at) VALUES (?, ?, ?)`)
+    .run(userId, name, new Date().toISOString());
+}
+
+export function removePantryItem(userId: string, name: string) {
+  getDb().prepare(`DELETE FROM pantry WHERE user_id = ? AND name = ?`).run(userId, name);
+}
+
+export function listPantry(userId: string): PantryItem[] {
+  return getDb()
+    .prepare(`SELECT name, added_at as addedAt FROM pantry WHERE user_id = ? ORDER BY name`)
+    .all(userId) as PantryItem[];
+}
+
+// ── Notifications ──────────────────────────────────────────────────
+
+export function getNotificationPrefs(userId: string): NotificationPrefs {
+  const row = getDb()
+    .prepare(
+      `SELECT anchor_enabled as anchorEnabled, anchor_time as anchorTimeHHMM,
+              moments_enabled as momentsEnabled, surprises_enabled as surprisesEnabled,
+              rescue_enabled as rescueEnabled
+         FROM notification_prefs WHERE user_id = ?`
+    )
+    .get(userId) as
+    | {
+        anchorEnabled: number;
+        anchorTimeHHMM: string;
+        momentsEnabled: number;
+        surprisesEnabled: number;
+        rescueEnabled: number;
+      }
+    | undefined;
+  if (!row) {
+    return {
+      anchorEnabled: true,
+      anchorTimeHHMM: "08:30",
+      momentsEnabled: true,
+      surprisesEnabled: true,
+      rescueEnabled: true,
+    };
+  }
+  return {
+    anchorEnabled: row.anchorEnabled === 1,
+    anchorTimeHHMM: row.anchorTimeHHMM,
+    momentsEnabled: row.momentsEnabled === 1,
+    surprisesEnabled: row.surprisesEnabled === 1,
+    rescueEnabled: row.rescueEnabled === 1,
+  };
+}
+
+export function upsertNotificationPrefs(userId: string, p: NotificationPrefs) {
+  getDb()
+    .prepare(
+      `INSERT INTO notification_prefs (user_id, anchor_enabled, anchor_time, moments_enabled, surprises_enabled, rescue_enabled)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         anchor_enabled = excluded.anchor_enabled,
+         anchor_time = excluded.anchor_time,
+         moments_enabled = excluded.moments_enabled,
+         surprises_enabled = excluded.surprises_enabled,
+         rescue_enabled = excluded.rescue_enabled`
+    )
+    .run(
+      userId,
+      p.anchorEnabled ? 1 : 0,
+      p.anchorTimeHHMM,
+      p.momentsEnabled ? 1 : 0,
+      p.surprisesEnabled ? 1 : 0,
+      p.rescueEnabled ? 1 : 0
+    );
+}
+
+export function insertNotification(userId: string, n: NotificationRecord) {
+  getDb()
+    .prepare(
+      `INSERT INTO notifications (id, user_id, type, title, body, sent_at, opened_at, dismissed_at, payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      n.id,
+      userId,
+      n.type,
+      n.title,
+      n.body,
+      n.sentAt,
+      n.openedAt,
+      n.dismissedAt,
+      n.payload ? JSON.stringify(n.payload) : null
+    );
+}
+
+export function listNotifications(userId: string, limit = 40): NotificationRecord[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, type, title, body, sent_at as sentAt, opened_at as openedAt,
+              dismissed_at as dismissedAt, payload
+         FROM notifications WHERE user_id = ? ORDER BY sent_at DESC LIMIT ?`
+    )
+    .all(userId, limit) as Array<Omit<NotificationRecord, "payload"> & { payload: string | null }>;
+  return rows.map((r) => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null }));
+}
+
+export function countNotificationsInWindow(userId: string, type: NotificationType, sinceISO: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND type = ? AND sent_at >= ?`
+    )
+    .get(userId, type, sinceISO) as { c: number };
+  return row.c;
+}
+
+export function lastNotificationAt(userId: string): string | undefined {
+  const row = getDb()
+    .prepare(`SELECT sent_at as sentAt FROM notifications WHERE user_id = ? ORDER BY sent_at DESC LIMIT 1`)
+    .get(userId) as { sentAt: string } | undefined;
+  return row?.sentAt;
+}
+
+export function markNotificationOpened(id: string) {
+  getDb().prepare(`UPDATE notifications SET opened_at = ? WHERE id = ?`).run(new Date().toISOString(), id);
+}
+
+export function markNotificationDismissed(id: string) {
+  getDb().prepare(`UPDATE notifications SET dismissed_at = ? WHERE id = ?`).run(new Date().toISOString(), id);
+}
+
+// ── Memory Gallery ─────────────────────────────────────────────────
+
+export function insertMemoryCard(userId: string, m: MemoryCard) {
+  getDb()
+    .prepare(
+      `INSERT INTO memory_gallery (id, user_id, item_id, title, caption, month_key, image_hint, redeemed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(m.id, userId, m.itemId, m.title, m.caption, m.monthKey, m.imageHint, m.redeemedAt);
+}
+
+export function listMemoryCards(userId: string): MemoryCard[] {
+  return getDb()
+    .prepare(
+      `SELECT id, item_id as itemId, title, caption, month_key as monthKey,
+              image_hint as imageHint, redeemed_at as redeemedAt
+         FROM memory_gallery WHERE user_id = ? ORDER BY redeemed_at DESC`
+    )
+    .all(userId) as MemoryCard[];
 }

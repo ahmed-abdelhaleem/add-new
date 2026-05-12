@@ -9,6 +9,7 @@ export default function MorningPage() {
   const router = useRouter();
   const [energy, setEnergy] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [commitment, setCommitment] = useState("");
+  const [nourish, setNourish] = useState<"yes" | "partly" | "no" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +20,11 @@ export default function MorningPage() {
       const res = await fetch("/api/morning", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ energy, commitment }),
+        body: JSON.stringify({
+          energy,
+          commitment,
+          nourishYesterday: nourish ?? undefined,
+        }),
       });
       if (!res.ok) throw new Error(`Failed (${res.status})`);
       router.push("/");
@@ -65,9 +70,25 @@ export default function MorningPage() {
             onChange={(e) => setCommitment(e.target.value.slice(0, 120))}
             placeholder="One sentence. Max 15 words."
             rows={2}
-            className="mt-2 w-full rounded-xl bg-ink-700 border border-ink-600 p-3 text-sm focus:outline-none focus:border-flame"
+            className="mt-2 w-full rounded-xl bg-ink-700 border border-ink-600 p-3 text-sm focus:outline-none focus:border-gold"
           />
           <p className="mt-1 text-xs text-ink-400">{commitment.length}/120</p>
+        </div>
+
+        <div>
+          <label className="text-sm text-ink-200">Did you eat roughly as planned yesterday?</label>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {(["yes", "partly", "no"] as const).map((a) => (
+              <button
+                key={a}
+                onClick={() => setNourish(a)}
+                className={`btn text-xs ${nourish === a ? "bg-gold text-ink-900" : "bg-ink-700"}`}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-ink-400">+400 pts for any answer.</p>
         </div>
 
         <button
@@ -81,8 +102,8 @@ export default function MorningPage() {
       </section>
 
       <p className="text-xs text-ink-400">
-        ACE will pick your three priority actions based on today&apos;s energy and the
-        domains you&apos;ve been quiet on.
+        ACE picks your three priority actions from today&apos;s energy and what you&apos;ve
+        been quiet on.
       </p>
     </div>
   );

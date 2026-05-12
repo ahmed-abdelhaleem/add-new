@@ -2,12 +2,17 @@ import Link from "next/link";
 
 import {
   DEMO_USER_ID,
+  getFoundation,
   getUser,
   listActiveBonusEvents,
   listActiveTrackEnrollments,
+  listMealLogs,
+  listNotifications,
+  listReadinessScores,
 } from "@/lib/db";
 import { listOpenIntercepts } from "@/lib/bank";
 import { lifetimeLevel } from "@/lib/levels";
+import { mealStreak } from "@/lib/nourish";
 import { currentSeason } from "@/lib/seasons";
 
 export const dynamic = "force-dynamic";
@@ -26,18 +31,27 @@ export default function MorePage() {
   const tracks = listActiveTrackEnrollments(DEMO_USER_ID);
   const season = currentSeason();
   const openIntercepts = listOpenIntercepts(DEMO_USER_ID);
+  const foundation = getFoundation(DEMO_USER_ID);
+  const foundationActive = foundation && !foundation.deactivatedAt;
+  const readiness = foundationActive ? listReadinessScores(DEMO_USER_ID) : [];
+  const latestReadiness = readiness[readiness.length - 1];
+  const mealS = mealStreak(listMealLogs(DEMO_USER_ID));
+  const unreadNotifs = listNotifications(DEMO_USER_ID).filter((n) => !n.openedAt && !n.dismissedAt).length;
 
   const items: Item[] = [
+    { href: "/foundation", label: "Foundation Mode", hint: "6-month readiness protocol", badge: foundationActive ? (latestReadiness ? `${latestReadiness.total}/100` : "active") : undefined },
+    { href: "/nourish", label: "NourishPlan", hint: "Plan / Shop / Today / Deals", badge: mealS > 0 ? `${mealS}d streak` : undefined },
     { href: "/morning", label: "Morning check-in", hint: "Energy + commitment + priorities" },
     { href: "/evening", label: "Evening log", hint: "Close the day" },
     { href: "/vault", label: "The Vault", hint: "Spend points on experiences" },
+    { href: "/memory", label: "Memory Gallery", hint: "What consistency produced" },
     { href: "/wishlist", label: "Wishlist", hint: "24-h cooling before redeem" },
     { href: "/curiosity", label: "Curiosity Queue", hint: "Defer the rabbit holes" },
     { href: "/actions", label: "Action items", hint: "Captured from brain dumps" },
     { href: "/history", label: "History heatmap", hint: "Last 12 weeks" },
     { href: "/mood", label: "Mood + medication", hint: "Private — pattern only" },
     { href: "/health", label: "Health integration", hint: user.health_provider ? `Connected: ${user.health_provider}` : "Apple Health / Google Fit" },
-    { href: "/bank", label: "Bank integration", hint: user.bank_connected === 1 ? "Connected" : "Impulse interception" , badge: openIntercepts.length ? `${openIntercepts.length} open` : undefined },
+    { href: "/bank", label: "Bank integration", hint: user.bank_connected === 1 ? "Connected" : "Impulse interception", badge: openIntercepts.length ? `${openIntercepts.length} open` : undefined },
     { href: "/payments", label: "Stake & payments", hint: "Charge, recover, donate" },
     { href: "/partner", label: "Accountability partner", hint: "Weekly digest + boosts" },
     { href: "/call", label: "Accountability call", hint: "5-min voice check-in", badge: "voice" },
@@ -45,6 +59,7 @@ export default function MorePage() {
     { href: "/events", label: "Bonus events", hint: "Double hours, drops, rescue", badge: events.length ? `${events.length} active` : undefined },
     { href: "/community", label: "Community challenges", hint: "Opt-in anonymous leaderboard" },
     { href: "/reports", label: "Monthly pattern reports", hint: "Behavioral summary, not diagnosis" },
+    { href: "/notifications", label: "Notifications", hint: "Four types · granular control", badge: unreadNotifs > 0 ? String(unreadNotifs) : undefined },
     { href: "/level", label: `Level ${level.level}`, hint: `${user.total_lifetime_points.toLocaleString()} lifetime pts` },
     { href: "/settings", label: "Settings", hint: "Tier, charity, profile" },
     { href: "/onboarding", label: "Re-run onboarding", hint: "The 7-question conversation" },
@@ -76,7 +91,7 @@ export default function MorePage() {
                 <p className="text-sm font-medium">{it.label}</p>
                 <p className="text-xs text-ink-400">{it.hint}</p>
               </div>
-              {it.badge && <span className="pill text-flame">{it.badge}</span>}
+              {it.badge && <span className="pill text-amber">{it.badge}</span>}
             </Link>
           </li>
         ))}

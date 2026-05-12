@@ -12,31 +12,40 @@ import type {
 
 const DEFAULT_MODEL = process.env.ACE_MODEL || "claude-sonnet-4-6";
 
-// PRD §6.2 — tone is the contract.
+// PRD §8 + §6.2 — tone is the contract.
 const ACE_SYSTEM_PROMPT = `You are ACE — the AI Consistency Engine inside MOMENTUM, an app for a user
-with an ADHD-inattentive profile who has a documented pattern of starting strong and
-collapsing past the novelty cliff. The user has staked real money each month and
-recovers it by behaving consistently.
+with an ADHD-inattentive profile, a history of depression, anxiety, and treated binge
+eating disorder, who is post-bariatric (gastric sleeve — smaller portions throughout).
+ADHD neuropsychiatric assessment is currently underway. The user lives alone in
+Stockholm and has staked real money each month, recovering it through behavior.
 
-Voice rules (these are absolute):
-- Never say "you should have" or "you failed to". Never use the word "failure".
+Voice rules (absolute, from PRD §8):
+- Never say "you should have" or "you failed to". Never use the words "failure",
+  "bad", "unhealthy", "inappropriate", or "wrong".
 - Never compare the user to other users.
-- Never use generic motivational phrases like "you've got this" or "believe in yourself".
+- Never use generic motivational phrases ("you've got this", "believe in yourself",
+  "keep up the great work"). Never use exclamation marks.
 - Never nag more than once per day on the same topic.
+- Never refer to any behavior as bad or unhealthy. Redirect, never moralize.
 
 Voice obligations:
 - Acknowledge what WAS done before addressing what wasn't.
 - When the user reports resistance, offer one specific SMALLER alternative that still
   earns points.
-- Frame gaps in the data as information, not as moral judgment.
+- Frame gaps in the data as information, not moral judgment.
 - Reference concrete numbers from the user's own history. Do not invent data.
-- Keep replies short. Two or three sentences is usually correct.
+- Keep replies short — two or three sentences is usually correct.
 
 Operational constraints:
 - You are not a therapist. If the user describes a clinical-level crisis, gently
-  recommend professional support and do not attempt to treat.
-- You are not a financial advisor. The stake is loss aversion plumbing, not a
-  bet — the user always recovers it through behavior.`;
+  recommend professional support; do not attempt to treat.
+- You are not a financial advisor. The stake is loss-aversion plumbing, not a bet —
+  the user always recovers it through their own behavior.
+- For Foundation Mode questions: framing is "spending 6 months becoming someone the
+  user would want to be in a relationship with" — never deprivation.
+- For NourishPlan: never count calories, never assign nutritional scores, never
+  suggest "healthier alternatives" unprompted, never use weight-loss language.
+  Portions are post-bariatric-aware (smaller quantities, simpler recipes).`;
 
 export interface AceContext {
   userName: string;
@@ -45,6 +54,21 @@ export interface AceContext {
   monthHistory: LoggedBehavior[];
   engagement: EngagementSignature;
   recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  // Optional v2 context blocks
+  foundation?: {
+    active: boolean;
+    daysSinceActivation: number;
+    commitment: string;
+    readinessTotal: number;
+    readinessPhase: string;
+    triggersThisWeek: number;
+    redirectsCompletedThisWeek: number;
+  };
+  nourish?: {
+    mealStreak: number;
+    plannedDaysThisMonth: number;
+    deliveryDaysThisMonth: number;
+  };
 }
 
 export function buildAceContextBlock(ctx: AceContext): string {
@@ -64,14 +88,29 @@ export function buildAceContextBlock(ctx: AceContext): string {
     .map(([key, count]) => `${BEHAVIOR_INDEX[key as keyof typeof BEHAVIOR_INDEX]?.label ?? key} ×${count}`)
     .join(", ");
 
-  return `User: ${ctx.userName}
-Tier: ${ctx.tier} (${ctx.stakeSEK} SEK staked this month)
-Recovered so far: ${recoveredSEK.toFixed(0)} SEK (${summary.total} pts)
-Domain points this month: physical ${summary.byDomain.physical}, mental ${summary.byDomain.mental}, social ${summary.byDomain.social}, regulation ${summary.byDomain.regulation}
-Current streak: ${streak} days
-Engagement signature: baseline ${ctx.engagement.baselineEventsPerDay.toFixed(2)}/day, last 7d ${ctx.engagement.last7DaysEventsPerDay.toFixed(2)}/day, delta ${ctx.engagement.deltaPct.toFixed(0)}%, consecutive low days: ${ctx.engagement.consecutiveLowDays}
-Decay tier: ${ctx.engagement.decayTier}${decay ? ` — ${decay}` : ""}
-Most-logged behaviors: ${topBehaviors || "none yet this month"}`;
+  const blocks = [
+    `User: ${ctx.userName}`,
+    `Tier: ${ctx.tier} (${ctx.stakeSEK} SEK staked this month)`,
+    `Recovered so far: ${recoveredSEK.toFixed(0)} SEK (${summary.total} pts)`,
+    `Domain points this month: physical ${summary.byDomain.physical}, mental ${summary.byDomain.mental}, social ${summary.byDomain.social}, regulation ${summary.byDomain.regulation}, foundation ${summary.byDomain.foundation}, nourish ${summary.byDomain.nourish}`,
+    `Current streak: ${streak} days`,
+    `Engagement: baseline ${ctx.engagement.baselineEventsPerDay.toFixed(2)}/day, last 7d ${ctx.engagement.last7DaysEventsPerDay.toFixed(2)}/day, delta ${ctx.engagement.deltaPct.toFixed(0)}%, consecutive low: ${ctx.engagement.consecutiveLowDays}`,
+    `Decay tier: ${ctx.engagement.decayTier}${decay ? ` — ${decay}` : ""}`,
+    `Most-logged: ${topBehaviors || "none yet this month"}`,
+  ];
+
+  if (ctx.foundation?.active) {
+    blocks.push(
+      `Foundation Mode: ACTIVE for ${ctx.foundation.daysSinceActivation} days. Commitment: "${ctx.foundation.commitment}". Readiness: ${ctx.foundation.readinessTotal}/100 (${ctx.foundation.readinessPhase}). This week: ${ctx.foundation.triggersThisWeek} triggers logged, ${ctx.foundation.redirectsCompletedThisWeek} redirects completed.`
+    );
+  }
+  if (ctx.nourish) {
+    blocks.push(
+      `NourishPlan: meal streak ${ctx.nourish.mealStreak} days. This month: ${ctx.nourish.plannedDaysThisMonth} planned days, ${ctx.nourish.deliveryDaysThisMonth} delivery days.`
+    );
+  }
+
+  return blocks.join("\n");
 }
 
 function localFallback(message: string, ctx: AceContext): string {

@@ -5,6 +5,8 @@ export type Domain =
   | "mental"
   | "social"
   | "regulation"
+  | "foundation"
+  | "nourish"
   | "consistency";
 
 export type BehaviorKey =
@@ -27,11 +29,22 @@ export type BehaviorKey =
   | "office_workday"
   | "personal_connect"
   // Self-Regulation
-  | "home_cooked_meal"
   | "no_delivery_today"
   | "screen_free_hour"
   | "daily_plan_completed"
-  | "no_impulse_today";
+  | "no_impulse_today"
+  // Foundation Mode (active only when Foundation Mode is on)
+  | "trigger_logged"
+  | "redirect_completed"
+  | "readiness_score_weekly"
+  | "foundation_month_complete"
+  // NourishPlan
+  | "meal_plan_created"
+  | "shopped_as_planned"
+  | "ate_as_planned"
+  | "meal_streak_3"
+  | "meal_streak_7"
+  | "home_cooked_meal";
 
 export interface BehaviorDefinition {
   key: BehaviorKey;
@@ -307,4 +320,158 @@ export interface LevelInfo {
   nextLevelAt: number;
   pctToNext: number;
   unlockedAt: string[];
+}
+
+// ── Foundation Mode (PRD §5 Feature 10) ─────────────────────────────
+
+export interface FoundationModeState {
+  userId: string;
+  activatedAt: string;
+  durationDays: number; // default 180
+  commitment: string;
+  originalStakeSEK: number;
+  surchargeSEK: number; // typically +500
+  deactivationStartedAt: string | null;
+  deactivatedAt: string | null;
+}
+
+export type TriggerEmotion = "boredom" | "loneliness" | "restlessness" | "anxious" | "stressed" | "other";
+
+export interface TriggerLog {
+  id: string;
+  loggedAt: string;
+  emotionUnderneath: TriggerEmotion | null;
+  energyLevel: number | null;
+  redirectChosen: string | null;
+  redirectCompletedAt: string | null;
+}
+
+export type ReadinessPhase = "Foundation" | "Building" | "Momentum" | "Ready";
+
+export interface ReadinessScore {
+  weekKey: string;
+  physical: number;
+  mental: number;
+  social: number;
+  regulation: number;
+  total: number;
+  phase: ReadinessPhase;
+  computedAt: string;
+}
+
+export interface RedirectOption {
+  key: string;
+  label: string;
+  bonusPoints: number;
+  timeWindow: "morning" | "afternoon" | "evening" | "late_night" | "any";
+  energy: "low" | "mid" | "high" | "any";
+}
+
+// ── NourishPlan (PRD §5 Feature 11) ────────────────────────────────
+
+export type MealSlot = "breakfast" | "lunch" | "dinner";
+export type EnergyForecast = "low" | "medium" | "high";
+
+export interface MealOption {
+  id: string;
+  name: string;
+  slot: MealSlot;
+  prepMinutes: number;
+  ingredientCount: number;
+  energyRequired: EnergyForecast;
+  ingredients: string[];
+  dealTag?: string;
+  section?: "produce" | "meat" | "dairy" | "frozen" | "bakery" | "drygoods";
+}
+
+export interface MealPlan {
+  id: string;
+  userId: string;
+  date: string;
+  energyForecast: EnergyForecast;
+  breakfastId: string;
+  lunchId: string;
+  dinnerId: string;
+  createdAt: string;
+}
+
+export interface MealLog {
+  date: string;
+  slot: MealSlot;
+  ateAsPlanned: boolean | null;
+  deliveryOrdered: boolean;
+  loggedAt: string;
+}
+
+export interface ShoppingList {
+  id: string;
+  userId: string;
+  planId: string;
+  items: ShoppingListItem[];
+  createdAt: string;
+  sentTo: "ica" | "coop" | "mathem" | null;
+  sentAt: string | null;
+}
+
+export interface ShoppingListItem {
+  name: string;
+  section: string;
+  checked: boolean;
+}
+
+export interface PantryItem {
+  name: string;
+  addedAt: string;
+}
+
+export interface WeeklyDeal {
+  store: "ica" | "coop" | "lidl" | "willys";
+  item: string;
+  priceSEK: number;
+  weekKey: string;
+}
+
+// ── Notifications (PRD §7) ─────────────────────────────────────────
+
+export type NotificationType = "anchor" | "moment" | "surprise" | "rescue";
+
+export interface NotificationRecord {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  sentAt: string;
+  openedAt: string | null;
+  dismissedAt: string | null;
+  payload: Record<string, unknown> | null;
+}
+
+export interface NotificationPrefs {
+  anchorEnabled: boolean;
+  anchorTimeHHMM: string;
+  momentsEnabled: boolean;
+  surprisesEnabled: boolean;
+  rescueEnabled: boolean;
+}
+
+// ── Memory Gallery (PRD §5 Feature 6) ──────────────────────────────
+
+export interface MemoryCard {
+  id: string;
+  itemId: string;
+  title: string;
+  caption: string;
+  monthKey: string;
+  imageHint: string;
+  redeemedAt: string;
+}
+
+// ── Live Feed ──────────────────────────────────────────────────────
+
+export interface FeedItem {
+  id: string;
+  kind: "behavior" | "redemption" | "streak" | "event" | "level" | "deal";
+  text: string;
+  at: string;
+  pointsDelta?: number;
 }
