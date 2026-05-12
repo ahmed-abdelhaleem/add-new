@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI-powered behavioral consistency engine with real-money gamification",
+  "engines": {
+    "node": ">=20.0.0 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"

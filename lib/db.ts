@@ -46,7 +46,13 @@ import type {
 let _db: Database.Database | null = null;
 
 function dbPath(): string {
-  return resolve(process.cwd(), process.env.MOMENTUM_DB_PATH || "momentum.db");
+  // Railway: attach a Volume mounted at /data and the DB persists across deploys.
+  // We default to that path in production so the prototype just works once the
+  // Volume is attached. Override with MOMENTUM_DB_PATH for everything else.
+  const explicit = process.env.MOMENTUM_DB_PATH;
+  if (explicit) return resolve(process.cwd(), explicit);
+  if (process.env.NODE_ENV === "production") return "/data/momentum.db";
+  return resolve(process.cwd(), "momentum.db");
 }
 
 export function getDb(): Database.Database {
