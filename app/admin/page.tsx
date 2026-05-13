@@ -9,6 +9,7 @@ import { INTEGRATION_CATALOG, type IntegrationKey } from "@/lib/integrations";
 import AdminDashboard from "./AdminDashboard";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export default async function AdminPage() {
   const session = await auth();

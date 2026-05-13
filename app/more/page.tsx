@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AccountSection from "@/app/components/AccountSection";
 import { getFoundation, getUser, listActiveBonusEvents, listActiveTrackEnrollments, listMealLogs, listNotifications, listReadinessScores } from "@/lib/db";
 import { getUserId } from "@/lib/session";
 import { listOpenIntercepts } from "@/lib/bank";
@@ -64,6 +65,7 @@ export default async function MorePage() {
 
   return (
     <div className="space-y-5">
+      <AccountSection />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">More</h1>
         <p className="text-sm text-ink-300">Everything else.</p>

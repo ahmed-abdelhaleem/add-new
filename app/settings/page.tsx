@@ -1,3 +1,4 @@
+import AccountSection from "@/app/components/AccountSection";
 import { getUser, getUserSettings } from "@/lib/db";
 import { getUserId } from "@/lib/session";
 
@@ -9,7 +10,9 @@ export default async function SettingsPage() {
   const userId = await getUserId();
   const user = getUser(userId)!;
   return (
-    <SettingsClient
+    <div className="space-y-5">
+      <AccountSection />
+      <SettingsClient
       initial={{
         name: user.name,
         stakeSEK: user.stake_sek,
@@ -18,5 +21,6 @@ export default async function SettingsPage() {
       }}
       settings={getUserSettings(userId)}
     />
+    </div>
   );
 }

@@ -4,57 +4,86 @@ import { signOut } from "@/auth";
 import { isGoogleAuthActive } from "@/lib/integrations";
 import { getSessionUser } from "@/lib/session";
 
-export default async function AuthWidget() {
-  const user = await getSessionUser();
-  const googleOn = isGoogleAuthActive();
-
-  if (!googleOn) {
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="text-[11px] uppercase tracking-wide text-ink-500">demo</span>
-        <Link href="/signin" className="rounded-lg border border-ink-600 px-2.5 py-1 text-xs font-medium text-ink-200 hover:border-gold hover:text-gold">
-          Log in
-        </Link>
-        <Link href="/signin#create-account" className="rounded-lg bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold hover:bg-gold/25">
-          Create account
-        </Link>
-      </div>
-    );
-  }
-
-  if (!user || user.demo) {
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link
-          href="/signin"
-          className="rounded-lg border border-ink-600 px-2.5 py-1 text-xs font-medium text-ink-200 hover:border-gold hover:text-gold"
-        >
-          Log in
-        </Link>
-        <Link
-          href="/signin#create-account"
-          className="rounded-lg bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold hover:bg-gold/25"
-        >
-          Create account
-        </Link>
-      </div>
-    );
-  }
-
+function AuthFallback() {
   return (
-    <form
-      action={async () => {
-        "use server";
-        await signOut({ redirectTo: "/" });
-      }}
-      className="flex items-center gap-2"
-    >
-      <span className="max-w-[140px] truncate text-xs text-ink-300" title={user.email ?? undefined}>
-        {user.name}
-      </span>
-      <button type="submit" className="text-xs font-medium text-gold underline hover:text-amber">
-        Sign out
-      </button>
-    </form>
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Link href="/settings" className="text-[11px] text-ink-500 underline hover:text-gold">
+        Account
+      </Link>
+      <Link href="/signin" className="rounded-lg border border-ink-600 px-2.5 py-1 text-xs font-medium text-ink-200 hover:border-gold hover:text-gold">
+        Log in
+      </Link>
+      <Link href="/signin#create-account" className="rounded-lg bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold hover:bg-gold/25">
+        Register
+      </Link>
+    </div>
   );
+}
+
+export default async function AuthWidget() {
+  try {
+    const user = await getSessionUser();
+    const googleOn = isGoogleAuthActive();
+
+    if (!googleOn) {
+      return (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-ink-500">demo</span>
+          <Link href="/settings" className="text-[11px] text-ink-500 underline hover:text-gold">
+            Account
+          </Link>
+          <Link href="/signin" className="rounded-lg border border-ink-600 px-2.5 py-1 text-xs font-medium text-ink-200 hover:border-gold hover:text-gold">
+            Log in
+          </Link>
+          <Link href="/signin#create-account" className="rounded-lg bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold hover:bg-gold/25">
+            Register
+          </Link>
+        </div>
+      );
+    }
+
+    if (!user || user.demo) {
+      return (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link href="/settings" className="text-[11px] text-ink-500 underline hover:text-gold">
+            Account
+          </Link>
+          <Link
+            href="/signin"
+            className="rounded-lg border border-ink-600 px-2.5 py-1 text-xs font-medium text-ink-200 hover:border-gold hover:text-gold"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signin#create-account"
+            className="rounded-lg bg-gold/15 px-2.5 py-1 text-xs font-medium text-gold hover:bg-gold/25"
+          >
+            Register
+          </Link>
+        </div>
+      );
+    }
+
+    return (
+      <form
+        action={async () => {
+          "use server";
+          await signOut({ redirectTo: "/" });
+        }}
+        className="flex items-center gap-2"
+      >
+        <Link href="/settings" className="text-[11px] text-ink-500 underline hover:text-gold">
+          Account
+        </Link>
+        <span className="max-w-[120px] truncate text-xs text-ink-300" title={user.email ?? undefined}>
+          {user.name}
+        </span>
+        <button type="submit" className="text-xs font-medium text-gold underline hover:text-amber">
+          Sign out
+        </button>
+      </form>
+    );
+  } catch {
+    return <AuthFallback />;
+  }
 }
