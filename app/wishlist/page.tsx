@@ -1,4 +1,5 @@
-import { DEMO_USER_ID, ensureMonthlyState, getMonthlyState, listWishlist } from "@/lib/db";
+import { ensureMonthlyState, getMonthlyState, listWishlist } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { sekToPoints } from "@/lib/points";
 import { monthKey } from "@/lib/time";
 
@@ -6,12 +7,13 @@ import WishlistClient from "./WishlistClient";
 
 export const dynamic = "force-dynamic";
 
-export default function WishlistPage() {
+export default async function WishlistPage() {
+  const userId = await getUserId();
   const mk = monthKey();
-  ensureMonthlyState(DEMO_USER_ID, mk);
-  const state = getMonthlyState(DEMO_USER_ID, mk)!;
+  ensureMonthlyState(userId, mk);
+  const state = getMonthlyState(userId, mk)!;
   const available = state.pointsEarned - state.pointsSpent;
-  const items = listWishlist(DEMO_USER_ID).map((i) => ({
+  const items = listWishlist(userId).map((i) => ({
     ...i,
     pointCost: i.costSEK > 0 ? sekToPoints(i.costSEK, i.rate as "A" | "B") : 0,
   }));

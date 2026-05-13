@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { DEMO_USER_ID, updateUser } from "@/lib/db";
+import { updateUser } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   firstWeekBonusUntil,
   tierForStake,
@@ -21,14 +22,13 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const err = validateAnswers(parsed.data);
   if (err) return NextResponse.json({ error: err }, { status: 400 });
-
-  const userId = DEMO_USER_ID;
   const tier = tierForStake(parsed.data.stakeSEK);
   const now = new Date();
 

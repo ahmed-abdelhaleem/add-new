@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { DEMO_USER_ID, listMemoryCards } from "@/lib/db";
+import { listMemoryCards } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 export async function GET() {
-  return NextResponse.json({ cards: listMemoryCards(DEMO_USER_ID) });
+  const userId = await getUserId();
+  return NextResponse.json({ cards: listMemoryCards(userId) });
 }

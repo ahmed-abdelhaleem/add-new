@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getUser,
-  insertBehavior,
-  listBankTransactions,
-  recordEarn,
-} from "@/lib/db";
+import { ensureMonthlyState, getUser, insertBehavior, listBankTransactions, recordEarn } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   cancelTransaction,
   confirmTransaction,
@@ -21,22 +15,24 @@ import { monthKey } from "@/lib/time";
 import { randomUUID } from "node:crypto";
 
 export async function GET() {
-  const user = getUser(DEMO_USER_ID)!;
+  const userId = await getUserId();
+  const user = getUser(userId)!;
   return NextResponse.json({
     connected: user.bank_connected === 1,
-    transactions: listBankTransactions(DEMO_USER_ID),
+    transactions: listBankTransactions(userId),
   });
 }
 
 const connectSchema = z.object({ action: z.enum(["connect", "disconnect"]) });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = connectSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  if (parsed.data.action === "connect") connectBank(DEMO_USER_ID);
-  else disconnectBank(DEMO_USER_ID);
+  if (parsed.data.action === "connect") connectBank(userId);
+  else disconnectBank(userId);
   return NextResponse.json({ ok: true });
 }
 
@@ -49,17 +45,19 @@ const simSchema = z.object({
 // Simulates a bank webhook arrival. In production this is hit by Tink / Aiia.
 // TODO(integration:tink_webhook): verify the X-Tink-Signature header.
 export async function PUT(req: Request) {
+  const userId = await getUserId();
   const parsed = simSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const tx = simulateIncomingTransaction({ userId: DEMO_USER_ID, ...parsed.data });
+  const tx = simulateIncomingTransaction({ userId: userId, ...parsed.data });
   return NextResponse.json({ tx });
 }
 
 const actSchema = z.object({ id: z.string(), action: z.enum(["confirm", "cancel"]) });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = actSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -68,14 +66,14 @@ export async function PATCH(req: Request) {
     cancelTransaction(parsed.data.id);
     // Award "no_delivery_today" points if this was a delivery.
     // PRD §5 Feature 5: cancellation within 5 min earns the points.
-    const tx = listBankTransactions(DEMO_USER_ID).find((t) => t.id === parsed.data.id);
+    const tx = listBankTransactions(userId).find((t) => t.id === parsed.data.id);
     if (tx && tx.category === "delivery") {
       const mk = monthKey();
-      ensureMonthlyState(DEMO_USER_ID, mk);
+      ensureMonthlyState(userId, mk);
       const def = BEHAVIOR_INDEX.no_delivery_today;
       const log = {
         id: randomUUID(),
-        userId: DEMO_USER_ID,
+        userId: userId,
         behavior: "no_delivery_today" as const,
         rawPoints: def.points,
         awardedPoints: def.points,
@@ -84,7 +82,7 @@ export async function PATCH(req: Request) {
         note: "Cancelled via impulse interception",
       };
       insertBehavior(log);
-      recordEarn(DEMO_USER_ID, mk, def.points);
+      recordEarn(userId, mk, def.points);
       return NextResponse.json({ ok: true, awarded: def.points });
     }
     return NextResponse.json({ ok: true });

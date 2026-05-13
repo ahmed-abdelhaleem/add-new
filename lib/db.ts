@@ -8,6 +8,9 @@ import type {
   AccountabilityPartner,
   ActionItem,
   BankTransaction,
+  BehaviorOverride,
+  BingeKind,
+  BingeLog,
   BonusEvent,
   BonusEventKind,
   BonusEventPayload,
@@ -16,7 +19,9 @@ import type {
   CharityDisbursement,
   CommunityChallenge,
   CuriosityItem,
+  CustomBehavior,
   DailyPlan,
+  Domain,
   EveningLog,
   FoundationModeState,
   HealthSample,
@@ -36,10 +41,14 @@ import type {
   PartnerBoost,
   Payment,
   ReadinessScore,
+  RoutineSlot,
   ShoppingList,
   StakeTier,
   TrackEnrollment,
   TriggerLog,
+  UserSettings,
+  VaultCustomItem,
+  VaultItem,
   WishlistItem,
 } from "./types";
 
@@ -84,8 +93,14 @@ function migrate(db: Database.Database) {
       partner_id TEXT,
       health_provider TEXT,
       bank_connected INTEGER NOT NULL DEFAULT 0,
-      payment_connected INTEGER NOT NULL DEFAULT 0
+      payment_connected INTEGER NOT NULL DEFAULT 0,
+      email TEXT,
+      image TEXT,
+      provider TEXT,
+      provider_id TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provider_id);
 
     CREATE TABLE IF NOT EXISTS behaviors (
       id TEXT PRIMARY KEY,
@@ -469,6 +484,94 @@ function migrate(db: Database.Database) {
       redeemed_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
+
+    -- User-defined behaviors (additive on top of the built-in catalog).
+    CREATE TABLE IF NOT EXISTS custom_behaviors (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      label TEXT NOT NULL,
+      notes TEXT,
+      domain TEXT NOT NULL,
+      points INTEGER NOT NULL,
+      daily_cap INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      routine TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (user_id, slug),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Per-user overrides on built-in behaviors. NULL fields mean "use default".
+    CREATE TABLE IF NOT EXISTS behavior_overrides (
+      user_id TEXT NOT NULL,
+      behavior_key TEXT NOT NULL,
+      points INTEGER,
+      daily_cap INTEGER,
+      daily_cap_active INTEGER NOT NULL DEFAULT 1,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (user_id, behavior_key),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Per-user toggles and preferences.
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY,
+      binge_subtract_points INTEGER NOT NULL DEFAULT 0,
+      ace_voice_enabled INTEGER NOT NULL DEFAULT 0,
+      default_chart_period TEXT NOT NULL DEFAULT 'week',
+      confirm_before_log INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- Binge / spiral tracking — separate from Foundation Mode triggers.
+    CREATE TABLE IF NOT EXISTS binge_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      duration_minutes INTEGER,
+      trigger_note TEXT,
+      reflection TEXT,
+      points_deducted INTEGER NOT NULL DEFAULT 0,
+      ai_pattern_note TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_binge_user ON binge_logs(user_id, started_at);
+
+    -- User-proposed Vault items, AI-moderated.
+    CREATE TABLE IF NOT EXISTS vault_custom_items (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL,
+      rate TEXT NOT NULL,
+      cost_sek INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      ai_review TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    -- NextAuth-compatible accounts (OAuth provider linkage). Sessions are
+    -- JWT-based so we don't need a sessions table.
+    CREATE TABLE IF NOT EXISTS accounts (
+      provider TEXT NOT NULL,
+      provider_account_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      access_token TEXT,
+      refresh_token TEXT,
+      expires_at INTEGER,
+      token_type TEXT,
+      scope TEXT,
+      id_token TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (provider, provider_account_id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
   `);
 }
 
@@ -537,6 +640,10 @@ export interface UserRow {
   health_provider: string | null;
   bank_connected: number;
   payment_connected: number;
+  email: string | null;
+  image: string | null;
+  provider: string | null;
+  provider_id: string | null;
 }
 
 export function getUser(userId: string): UserRow | undefined {
@@ -1744,4 +1851,366 @@ export function listMemoryCards(userId: string): MemoryCard[] {
          FROM memory_gallery WHERE user_id = ? ORDER BY redeemed_at DESC`
     )
     .all(userId) as MemoryCard[];
+}
+
+// ── Auth / users ────────────────────────────────────────────────────
+
+export function findUserByProvider(provider: string, providerId: string) {
+  return getDb()
+    .prepare(`SELECT * FROM users WHERE provider = ? AND provider_id = ?`)
+    .get(provider, providerId) as UserRow | undefined;
+}
+
+export function findUserByEmail(email: string) {
+  return getDb()
+    .prepare(`SELECT * FROM users WHERE email = ?`)
+    .get(email) as UserRow | undefined;
+}
+
+export function createOauthUser(opts: {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  provider: string;
+  providerId: string;
+}) {
+  const now = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO users (id, name, tier, stake_sek, charity, created_at,
+                          email, image, provider, provider_id)
+       VALUES (?, ?, 'Standard', 1000, 'Läkare Utan Gränser', ?, ?, ?, ?, ?)`
+    )
+    .run(opts.id, opts.name, now, opts.email, opts.image ?? null, opts.provider, opts.providerId);
+  // Seed monthly state for the current month.
+  const monthKey = now.slice(0, 7);
+  getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO monthly_state (user_id, month_key, stake_sek, tier, charity)
+       VALUES (?, ?, 1000, 'Standard', 'Läkare Utan Gränser')`
+    )
+    .run(opts.id, monthKey);
+}
+
+export function insertOauthAccount(opts: {
+  provider: string;
+  providerAccountId: string;
+  userId: string;
+  type: string;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  expiresAt?: number | null;
+  tokenType?: string | null;
+  scope?: string | null;
+  idToken?: string | null;
+}) {
+  getDb()
+    .prepare(
+      `INSERT OR REPLACE INTO accounts
+        (provider, provider_account_id, user_id, type, access_token, refresh_token,
+         expires_at, token_type, scope, id_token, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      opts.provider,
+      opts.providerAccountId,
+      opts.userId,
+      opts.type,
+      opts.accessToken ?? null,
+      opts.refreshToken ?? null,
+      opts.expiresAt ?? null,
+      opts.tokenType ?? null,
+      opts.scope ?? null,
+      opts.idToken ?? null,
+      new Date().toISOString()
+    );
+}
+
+// ── Settings ───────────────────────────────────────────────────────
+
+export function getUserSettings(userId: string): UserSettings {
+  const row = getDb()
+    .prepare(
+      `SELECT binge_subtract_points as bingeSubtractPoints,
+              ace_voice_enabled as aceVoiceEnabled,
+              default_chart_period as defaultChartPeriod,
+              confirm_before_log as confirmBeforeLog
+         FROM user_settings WHERE user_id = ?`
+    )
+    .get(userId) as
+    | {
+        bingeSubtractPoints: number;
+        aceVoiceEnabled: number;
+        defaultChartPeriod: UserSettings["defaultChartPeriod"];
+        confirmBeforeLog: number;
+      }
+    | undefined;
+  if (!row) {
+    return {
+      bingeSubtractPoints: false,
+      aceVoiceEnabled: false,
+      defaultChartPeriod: "week",
+      confirmBeforeLog: true,
+    };
+  }
+  return {
+    bingeSubtractPoints: row.bingeSubtractPoints === 1,
+    aceVoiceEnabled: row.aceVoiceEnabled === 1,
+    defaultChartPeriod: row.defaultChartPeriod,
+    confirmBeforeLog: row.confirmBeforeLog === 1,
+  };
+}
+
+export function updateUserSettings(userId: string, patch: Partial<UserSettings>) {
+  const current = getUserSettings(userId);
+  const next = { ...current, ...patch };
+  getDb()
+    .prepare(
+      `INSERT INTO user_settings (user_id, binge_subtract_points, ace_voice_enabled,
+                                   default_chart_period, confirm_before_log)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         binge_subtract_points = excluded.binge_subtract_points,
+         ace_voice_enabled = excluded.ace_voice_enabled,
+         default_chart_period = excluded.default_chart_period,
+         confirm_before_log = excluded.confirm_before_log`
+    )
+    .run(
+      userId,
+      next.bingeSubtractPoints ? 1 : 0,
+      next.aceVoiceEnabled ? 1 : 0,
+      next.defaultChartPeriod,
+      next.confirmBeforeLog ? 1 : 0
+    );
+}
+
+// ── Custom behaviors ───────────────────────────────────────────────
+
+export function insertCustomBehavior(b: CustomBehavior) {
+  getDb()
+    .prepare(
+      `INSERT INTO custom_behaviors (id, user_id, slug, label, notes, domain, points, daily_cap,
+                                     enabled, routine, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      b.id,
+      b.userId,
+      b.slug,
+      b.label,
+      b.notes ?? null,
+      b.domain,
+      b.points,
+      b.dailyCap,
+      b.enabled ? 1 : 0,
+      b.routine,
+      b.createdAt
+    );
+}
+
+export function listCustomBehaviors(userId: string): CustomBehavior[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, slug, label, notes, domain, points,
+              daily_cap as dailyCap, enabled, routine, created_at as createdAt
+         FROM custom_behaviors WHERE user_id = ? ORDER BY created_at ASC`
+    )
+    .all(userId) as Array<Omit<CustomBehavior, "enabled"> & { enabled: number }>;
+  return rows.map((r) => ({ ...r, enabled: r.enabled === 1 }));
+}
+
+export function getCustomBehavior(userId: string, slug: string): CustomBehavior | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT id, user_id as userId, slug, label, notes, domain, points,
+              daily_cap as dailyCap, enabled, routine, created_at as createdAt
+         FROM custom_behaviors WHERE user_id = ? AND slug = ?`
+    )
+    .get(userId, slug) as
+    | (Omit<CustomBehavior, "enabled"> & { enabled: number })
+    | undefined;
+  if (!row) return undefined;
+  return { ...row, enabled: row.enabled === 1 };
+}
+
+export function updateCustomBehavior(id: string, patch: Partial<CustomBehavior>) {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (patch.label != null) { fields.push("label = ?"); values.push(patch.label); }
+  if (patch.notes !== undefined) { fields.push("notes = ?"); values.push(patch.notes); }
+  if (patch.points != null) { fields.push("points = ?"); values.push(patch.points); }
+  if (patch.dailyCap !== undefined) { fields.push("daily_cap = ?"); values.push(patch.dailyCap); }
+  if (patch.enabled != null) { fields.push("enabled = ?"); values.push(patch.enabled ? 1 : 0); }
+  if (patch.routine !== undefined) { fields.push("routine = ?"); values.push(patch.routine); }
+  if (patch.domain != null) { fields.push("domain = ?"); values.push(patch.domain); }
+  if (fields.length === 0) return;
+  values.push(id);
+  getDb().prepare(`UPDATE custom_behaviors SET ${fields.join(", ")} WHERE id = ?`).run(...(values as never[]));
+}
+
+export function deleteCustomBehavior(id: string, userId: string) {
+  getDb().prepare(`DELETE FROM custom_behaviors WHERE id = ? AND user_id = ?`).run(id, userId);
+}
+
+// ── Behavior overrides on built-in behaviors ───────────────────────
+
+export function getBehaviorOverride(userId: string, key: string): BehaviorOverride | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT behavior_key as behaviorKey, points, daily_cap as dailyCap,
+              daily_cap_active as dailyCapActive, enabled
+         FROM behavior_overrides WHERE user_id = ? AND behavior_key = ?`
+    )
+    .get(userId, key) as
+    | { behaviorKey: string; points: number | null; dailyCap: number | null; dailyCapActive: number; enabled: number }
+    | undefined;
+  if (!row) return undefined;
+  return {
+    behaviorKey: row.behaviorKey,
+    points: row.points,
+    dailyCap: row.dailyCap,
+    dailyCapActive: row.dailyCapActive === 1,
+    enabled: row.enabled === 1,
+  };
+}
+
+export function listBehaviorOverrides(userId: string): BehaviorOverride[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT behavior_key as behaviorKey, points, daily_cap as dailyCap,
+              daily_cap_active as dailyCapActive, enabled
+         FROM behavior_overrides WHERE user_id = ?`
+    )
+    .all(userId) as Array<{ behaviorKey: string; points: number | null; dailyCap: number | null; dailyCapActive: number; enabled: number }>;
+  return rows.map((r) => ({
+    behaviorKey: r.behaviorKey,
+    points: r.points,
+    dailyCap: r.dailyCap,
+    dailyCapActive: r.dailyCapActive === 1,
+    enabled: r.enabled === 1,
+  }));
+}
+
+export function upsertBehaviorOverride(userId: string, o: BehaviorOverride) {
+  getDb()
+    .prepare(
+      `INSERT INTO behavior_overrides (user_id, behavior_key, points, daily_cap, daily_cap_active, enabled)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, behavior_key) DO UPDATE SET
+         points = excluded.points,
+         daily_cap = excluded.daily_cap,
+         daily_cap_active = excluded.daily_cap_active,
+         enabled = excluded.enabled`
+    )
+    .run(
+      userId,
+      o.behaviorKey,
+      o.points,
+      o.dailyCap,
+      o.dailyCapActive ? 1 : 0,
+      o.enabled ? 1 : 0
+    );
+}
+
+export function deleteBehaviorOverride(userId: string, key: string) {
+  getDb().prepare(`DELETE FROM behavior_overrides WHERE user_id = ? AND behavior_key = ?`).run(userId, key);
+}
+
+// ── Binge logs ─────────────────────────────────────────────────────
+
+export function insertBinge(userId: string, b: BingeLog) {
+  getDb()
+    .prepare(
+      `INSERT INTO binge_logs (id, user_id, kind, started_at, duration_minutes, trigger_note,
+                                reflection, points_deducted, ai_pattern_note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      b.id,
+      userId,
+      b.kind,
+      b.startedAt,
+      b.durationMinutes,
+      b.triggerNote,
+      b.reflection,
+      b.pointsDeducted,
+      b.aiPatternNote
+    );
+}
+
+export function listBinges(userId: string, limit = 100): BingeLog[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, kind, started_at as startedAt, duration_minutes as durationMinutes,
+              trigger_note as triggerNote, reflection, points_deducted as pointsDeducted,
+              ai_pattern_note as aiPatternNote
+         FROM binge_logs WHERE user_id = ? ORDER BY started_at DESC LIMIT ?`
+    )
+    .all(userId, limit) as BingeLog[];
+  return rows;
+}
+
+export function updateBinge(id: string, userId: string, patch: Partial<BingeLog>) {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (patch.kind != null) { fields.push("kind = ?"); values.push(patch.kind); }
+  if (patch.durationMinutes !== undefined) { fields.push("duration_minutes = ?"); values.push(patch.durationMinutes); }
+  if (patch.triggerNote !== undefined) { fields.push("trigger_note = ?"); values.push(patch.triggerNote); }
+  if (patch.reflection !== undefined) { fields.push("reflection = ?"); values.push(patch.reflection); }
+  if (patch.aiPatternNote !== undefined) { fields.push("ai_pattern_note = ?"); values.push(patch.aiPatternNote); }
+  if (fields.length === 0) return;
+  values.push(id, userId);
+  getDb().prepare(`UPDATE binge_logs SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`).run(...(values as never[]));
+}
+
+export function deleteBinge(id: string, userId: string) {
+  getDb().prepare(`DELETE FROM binge_logs WHERE id = ? AND user_id = ?`).run(id, userId);
+}
+
+// ── Custom vault items ────────────────────────────────────────────
+
+export function insertVaultCustom(item: VaultCustomItem) {
+  getDb()
+    .prepare(
+      `INSERT INTO vault_custom_items (id, user_id, title, description, category, rate, cost_sek,
+                                        status, ai_review, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      item.id,
+      item.userId,
+      item.title,
+      item.description,
+      item.category,
+      item.rate,
+      item.costSEK,
+      item.status,
+      item.aiReview,
+      item.createdAt
+    );
+}
+
+export function listVaultCustom(userId: string): VaultCustomItem[] {
+  return getDb()
+    .prepare(
+      `SELECT id, user_id as userId, title, description, category, rate, cost_sek as costSEK,
+              status, ai_review as aiReview, created_at as createdAt
+         FROM vault_custom_items WHERE user_id = ? ORDER BY created_at DESC`
+    )
+    .all(userId) as VaultCustomItem[];
+}
+
+export function deleteVaultCustom(id: string, userId: string) {
+  getDb().prepare(`DELETE FROM vault_custom_items WHERE id = ? AND user_id = ?`).run(id, userId);
+}
+
+// ── Delete / clear ACE messages ───────────────────────────────────
+
+export function deleteAceMessage(id: string, userId: string) {
+  getDb().prepare(`DELETE FROM ace_messages WHERE id = ? AND user_id = ?`).run(id, userId);
+}
+
+export function clearAceMessages(userId: string) {
+  getDb().prepare(`DELETE FROM ace_messages WHERE user_id = ?`).run(userId);
 }

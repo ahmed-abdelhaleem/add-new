@@ -1,9 +1,11 @@
-import { DEMO_USER_ID, listCalls } from "@/lib/db";
+import { listCalls } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 import CallClient from "./CallClient";
 
 export const dynamic = "force-dynamic";
 
-export default function CallPage() {
-  return <CallClient initialCalls={listCalls(DEMO_USER_ID)} />;
+export default async function CallPage() {
+  const userId = await getUserId();
+  return <CallClient initialCalls={listCalls(userId)} />;
 }

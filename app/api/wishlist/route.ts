@@ -2,17 +2,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  deleteWishlistItem,
-  insertRedemption,
-  insertWishlistItem,
-  listWishlist,
-  markWishlistRedeemed,
-  recordSpend,
-  getMonthlyState,
-  ensureMonthlyState,
-} from "@/lib/db";
+import { deleteWishlistItem, insertRedemption, insertWishlistItem, listWishlist, markWishlistRedeemed, recordSpend, getMonthlyState, ensureMonthlyState } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { sekToPoints } from "@/lib/points";
 import { monthKey } from "@/lib/time";
 import type { WishlistItem } from "@/lib/types";
@@ -28,11 +19,11 @@ const addSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = addSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const userId = DEMO_USER_ID;
   const now = new Date();
   const cooledUntil = new Date(now.getTime() + COOLING_HOURS * 60 * 60 * 1000);
   // Default rate by category — anything non-Category-A becomes B.
@@ -57,17 +48,18 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json({ items: listWishlist(DEMO_USER_ID) });
+  const userId = await getUserId();
+  return NextResponse.json({ items: listWishlist(userId) });
 }
 
 const redeemSchema = z.object({ id: z.string(), action: z.enum(["redeem", "delete"]) });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = redeemSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const userId = DEMO_USER_ID;
   if (parsed.data.action === "delete") {
     deleteWishlistItem(parsed.data.id, userId);
     return NextResponse.json({ ok: true });

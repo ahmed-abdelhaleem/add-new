@@ -2,17 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { respondAsAce } from "@/lib/ace";
-import {
-  DEMO_USER_ID,
-  getFoundation,
-  getUser,
-  insertAceMessage,
-  listAceMessages,
-  listBehaviorsAll,
-  listMealLogs,
-  listReadinessScores,
-  listTriggerLogs,
-} from "@/lib/db";
+import { getFoundation, getUser, insertAceMessage, listAceMessages, listBehaviorsAll, listMealLogs, listReadinessScores, listTriggerLogs } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { computeEngagement } from "@/lib/decay";
 import { weekKeyFor } from "@/lib/foundation";
 import { mealStreak, planVsDeliveryRatio } from "@/lib/nourish";
@@ -23,12 +14,11 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-
-  const userId = DEMO_USER_ID;
   const user = getUser(userId);
   if (!user) return NextResponse.json({ error: "No user" }, { status: 404 });
 
@@ -85,4 +75,24 @@ export async function POST(req: Request) {
   const assistantMsg = insertAceMessage(userId, "assistant", reply);
 
   return NextResponse.json({ user: userMsg, assistant: assistantMsg, engagement });
+}
+
+import { clearAceMessages, deleteAceMessage } from "@/lib/db";
+import { z as zd } from "zod";
+
+const delSchema = zd.object({ id: zd.string() });
+
+export async function DELETE(req: Request) {
+  const userId = await getUserId();
+  const body = await req.json().catch(() => ({}));
+  if (body && typeof body === "object" && "all" in body && body.all === true) {
+    clearAceMessages(userId);
+    return NextResponse.json({ ok: true, cleared: true });
+  }
+  const parsed = delSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  deleteAceMessage(parsed.data.id, userId);
+  return NextResponse.json({ ok: true });
 }

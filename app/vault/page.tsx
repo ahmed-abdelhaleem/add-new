@@ -1,9 +1,6 @@
 import { VAULT } from "@/lib/catalog";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getMonthlyState,
-} from "@/lib/db";
+import { ensureMonthlyState, getMonthlyState } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { sekToPoints } from "@/lib/points";
 import { monthKey } from "@/lib/time";
 
@@ -11,10 +8,11 @@ import VaultClient from "./VaultClient";
 
 export const dynamic = "force-dynamic";
 
-export default function VaultPage() {
+export default async function VaultPage() {
+  const userId = await getUserId();
   const mk = monthKey();
-  ensureMonthlyState(DEMO_USER_ID, mk);
-  const state = getMonthlyState(DEMO_USER_ID, mk)!;
+  ensureMonthlyState(userId, mk);
+  const state = getMonthlyState(userId, mk)!;
   const available = state.pointsEarned - state.pointsSpent;
 
   const items = VAULT.map((it) => ({

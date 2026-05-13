@@ -3,21 +3,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { categorizeBrainDump } from "@/lib/ace";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  insertActionItem,
-  insertBehavior,
-  insertBrainDump,
-  insertCuriosity,
-  insertWishlistItem,
-  isComebackOnCooldown,
-  listBehaviorsAll,
-  listBehaviorsForMonth,
-  markComebackUsed,
-  recordEarn,
-  updateBrainDumpCategorization,
-} from "@/lib/db";
+import { ensureMonthlyState, insertActionItem, insertBehavior, insertBrainDump, insertCuriosity, insertWishlistItem, isComebackOnCooldown, listBehaviorsAll, listBehaviorsForMonth, markComebackUsed, recordEarn, updateBrainDumpCategorization } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { awardForBehavior, daysSinceLastActivity } from "@/lib/points";
 import { monthKey } from "@/lib/time";
 import type { BrainDump, LoggedBehavior, WishlistItem } from "@/lib/types";
@@ -29,12 +16,11 @@ const schema = z.object({
 const COOLING_HOURS = 24;
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-
-  const userId = DEMO_USER_ID;
   const now = new Date();
   const mk = monthKey(now);
   ensureMonthlyState(userId, mk);

@@ -2,13 +2,8 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  insertBehavior,
-  recordEarn,
-  upsertEveningLog,
-} from "@/lib/db";
+import { ensureMonthlyState, insertBehavior, recordEarn, upsertEveningLog } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { dayKey, monthKey } from "@/lib/time";
 import type { LoggedBehavior } from "@/lib/types";
 
@@ -22,12 +17,11 @@ const schema = z.object({
 const SHOW_UP_POINTS = 200;
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-
-  const userId = DEMO_USER_ID;
   const now = new Date();
   const mk = monthKey(now);
   ensureMonthlyState(userId, mk);

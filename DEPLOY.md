@@ -46,6 +46,19 @@ In the service → **Variables**:
 | `ANTHROPIC_API_KEY` | `sk-ant-...` | Optional. Without it, ACE uses the local fallback. |
 | `ACE_MODEL` | `claude-sonnet-4-6` | Optional. Override only if you want a different Claude. |
 | `MOMENTUM_DB_PATH` | leave unset | Auto-resolves to `/data/momentum.db` in production. |
+| `AUTH_SECRET` | random 32+ char string | Required for Google sign-in. Generate with `openssl rand -base64 32`. |
+| `AUTH_URL` | `https://your-app.up.railway.app` | Required for Google sign-in in production. |
+| `AUTH_GOOGLE_ID` | from Google Cloud Console | Required for Google sign-in. |
+| `AUTH_GOOGLE_SECRET` | from Google Cloud Console | Required for Google sign-in. |
+
+If `AUTH_*` env vars are absent, the app stays single-user (demo) — useful for first-load before you finish OAuth setup.
+
+### Setting up Google OAuth
+
+1. Google Cloud Console → APIs & Services → Credentials → Create OAuth 2.0 Client ID
+2. Application type: Web application
+3. Authorized redirect URI: `https://your-app.up.railway.app/api/auth/callback/google`
+4. Copy the Client ID and Client Secret into the Railway env vars above.
 
 Don't set `PORT` — Railway injects it and `npm start` reads it.
 

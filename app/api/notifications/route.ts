@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  getNotificationPrefs,
-  listNotifications,
-  markNotificationDismissed,
-  markNotificationOpened,
-  upsertNotificationPrefs,
-} from "@/lib/db";
+import { getNotificationPrefs, listNotifications, markNotificationDismissed, markNotificationOpened, upsertNotificationPrefs } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   anchorCopy,
   dispatch,
@@ -20,9 +14,10 @@ import { currentStreak, summarizeMonth, pointsToSEK } from "@/lib/points";
 import { listBehaviorsAll } from "@/lib/db";
 
 export async function GET() {
+  const userId = await getUserId();
   return NextResponse.json({
-    prefs: getNotificationPrefs(DEMO_USER_ID),
-    history: listNotifications(DEMO_USER_ID, 40),
+    prefs: getNotificationPrefs(userId),
+    history: listNotifications(userId, 40),
   });
 }
 
@@ -35,12 +30,13 @@ const prefsSchema = z.object({
 });
 
 export async function PUT(req: Request) {
+  const userId = await getUserId();
   const parsed = prefsSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const current = getNotificationPrefs(DEMO_USER_ID);
-  upsertNotificationPrefs(DEMO_USER_ID, { ...current, ...parsed.data });
+  const current = getNotificationPrefs(userId);
+  upsertNotificationPrefs(userId, { ...current, ...parsed.data });
   return NextResponse.json({ ok: true });
 }
 
@@ -54,12 +50,13 @@ const dispatchSchema = z.object({
 // Trigger a notification — used for the prototype's "send a test" buttons.
 // Production: cron + decay detector trigger these without UI involvement.
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = dispatchSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const prefs = getNotificationPrefs(DEMO_USER_ID);
-  const history = listBehaviorsAll(DEMO_USER_ID);
+  const prefs = getNotificationPrefs(userId);
+  const history = listBehaviorsAll(userId);
   const streak = currentStreak(history);
   const summary = summarizeMonth(history);
   const recovered = Math.round(pointsToSEK(summary.total));
@@ -87,13 +84,14 @@ export async function POST(req: Request) {
       intent = { type: "rescue" as const, ...rescueCopy((parsed.data.variant as "still_here") ?? "still_here") };
       break;
   }
-  const res = dispatch(DEMO_USER_ID, { ...intent, opensToday: parsed.data.opensToday }, prefs);
+  const res = dispatch(userId, { ...intent, opensToday: parsed.data.opensToday }, prefs);
   return NextResponse.json(res);
 }
 
 const actSchema = z.object({ id: z.string(), action: z.enum(["open", "dismiss"]) });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = actSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

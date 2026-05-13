@@ -1,13 +1,15 @@
-import { DEMO_USER_ID, listMedication, listMood } from "@/lib/db";
+import { listMedication, listMood } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { buildMoodHeatmap, moodIntensity } from "@/lib/heatmap";
 
 import MoodClient from "./MoodClient";
 
 export const dynamic = "force-dynamic";
 
-export default function MoodPage() {
-  const mood = listMood(DEMO_USER_ID);
-  const medication = listMedication(DEMO_USER_ID);
+export default async function MoodPage() {
+  const userId = await getUserId();
+  const mood = listMood(userId);
+  const medication = listMedication(userId);
   const heatmap = buildMoodHeatmap(mood);
   return (
     <div className="space-y-5">

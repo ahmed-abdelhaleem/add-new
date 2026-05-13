@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { DEMO_USER_ID, updateUser } from "@/lib/db";
+import { updateUser } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { tierForStake } from "@/lib/onboarding";
 
 const schema = z.object({
@@ -11,11 +12,11 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const userId = DEMO_USER_ID;
   const patch: Parameters<typeof updateUser>[1] = {};
   if (parsed.data.name) patch.name = parsed.data.name;
   if (parsed.data.charity) patch.charity = parsed.data.charity;

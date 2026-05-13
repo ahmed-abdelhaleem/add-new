@@ -3,14 +3,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { BEHAVIOR_INDEX } from "@/lib/economy";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  insertBehavior,
-  listBehaviorsForMonth,
-  recordEarn,
-  upsertDailyPlan,
-} from "@/lib/db";
+import { ensureMonthlyState, insertBehavior, listBehaviorsForMonth, recordEarn, upsertDailyPlan } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { pickPriorities } from "@/lib/priorities";
 import { dayKey, monthKey } from "@/lib/time";
 
@@ -28,12 +22,11 @@ const schema = z.object({
 const NOURISH_CHECKIN_POINTS = 400;
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-
-  const userId = DEMO_USER_ID;
   const now = new Date();
   const mk = monthKey(now);
   ensureMonthlyState(userId, mk);

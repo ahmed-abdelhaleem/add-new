@@ -3,14 +3,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { BEHAVIOR_INDEX } from "@/lib/economy";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  insertBehavior,
-  listMealLogs,
-  recordEarn,
-  upsertMealLog,
-} from "@/lib/db";
+import { ensureMonthlyState, insertBehavior, listMealLogs, recordEarn, upsertMealLog } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { mealStreak, mealStreakBonusDue } from "@/lib/nourish";
 import { dayKey, monthKey } from "@/lib/time";
 
@@ -25,12 +19,13 @@ const schema = z.object({
 // PRD §11.2: every "yes/partly/no" still earns base points; streak math depends
 // only on "yes" answers crossing 2 slots / day (see lib/nourish.mealStreak).
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const date = parsed.data.date ?? dayKey();
-  upsertMealLog(DEMO_USER_ID, {
+  upsertMealLog(userId, {
     date,
     slot: parsed.data.slot,
     ateAsPlanned:
@@ -46,10 +41,10 @@ export async function POST(req: Request) {
   // Award ate_as_planned (capped daily so multiple slot logs don't multi-award).
   const def = BEHAVIOR_INDEX.ate_as_planned;
   const mk = monthKey();
-  ensureMonthlyState(DEMO_USER_ID, mk);
+  ensureMonthlyState(userId, mk);
   insertBehavior({
     id: randomUUID(),
-    userId: DEMO_USER_ID,
+    userId: userId,
     behavior: "ate_as_planned",
     rawPoints: def.points,
     awardedPoints: def.points,
@@ -57,10 +52,10 @@ export async function POST(req: Request) {
     loggedAt: new Date().toISOString(),
     note: `${parsed.data.slot}: ${parsed.data.ateAsPlanned}`,
   });
-  recordEarn(DEMO_USER_ID, mk, def.points);
+  recordEarn(userId, mk, def.points);
 
   // Check if a streak milestone fires.
-  const logs = listMealLogs(DEMO_USER_ID);
+  const logs = listMealLogs(userId);
   const streak = mealStreak(logs);
   const milestone = mealStreakBonusDue(streak);
   let bonus = 0;
@@ -68,7 +63,7 @@ export async function POST(req: Request) {
     const mdef = BEHAVIOR_INDEX[milestone];
     insertBehavior({
       id: randomUUID(),
-      userId: DEMO_USER_ID,
+      userId: userId,
       behavior: milestone,
       rawPoints: mdef.points,
       awardedPoints: mdef.points,
@@ -76,7 +71,7 @@ export async function POST(req: Request) {
       loggedAt: new Date().toISOString(),
       note: `Meal streak ${streak}-day milestone`,
     });
-    recordEarn(DEMO_USER_ID, mk, mdef.points);
+    recordEarn(userId, mk, mdef.points);
     bonus = mdef.points;
   }
 
@@ -84,6 +79,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  const logs = listMealLogs(DEMO_USER_ID);
+  const userId = await getUserId();
+  const logs = listMealLogs(userId);
   return NextResponse.json({ logs, streak: mealStreak(logs) });
 }

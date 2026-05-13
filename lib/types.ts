@@ -44,7 +44,22 @@ export type BehaviorKey =
   | "ate_as_planned"
   | "meal_streak_3"
   | "meal_streak_7"
-  | "home_cooked_meal";
+  | "home_cooked_meal"
+  // Morning routine (Self-Regulation domain)
+  | "morning_shower"
+  | "morning_brush"
+  | "morning_minoxidil"
+  | "morning_kelo_cote"
+  // Midday — mental/relaxation
+  | "midday_meditation"
+  | "midday_walk"
+  | "midday_breathwork"
+  // Evening routine
+  | "evening_shower"
+  | "evening_brush"
+  | "evening_minoxidil"
+  | "evening_kelo_cote"
+  | "evening_acne_cream";
 
 export interface BehaviorDefinition {
   key: BehaviorKey;
@@ -474,4 +489,69 @@ export interface FeedItem {
   text: string;
   at: string;
   pointsDelta?: number;
+}
+
+// ── Custom behaviors + per-user overrides ──────────────────────────
+
+export type RoutineSlot = "morning" | "midday" | "evening" | null;
+
+export interface CustomBehavior {
+  id: string;
+  userId: string;
+  slug: string;
+  label: string;
+  notes?: string;
+  domain: Exclude<Domain, "consistency">;
+  points: number;
+  dailyCap: number | null;
+  enabled: boolean;
+  routine: RoutineSlot;
+  createdAt: string;
+}
+
+export interface BehaviorOverride {
+  behaviorKey: string;
+  points: number | null;
+  dailyCap: number | null;
+  dailyCapActive: boolean;
+  enabled: boolean;
+}
+
+// ── User settings ──────────────────────────────────────────────────
+
+export interface UserSettings {
+  bingeSubtractPoints: boolean;
+  aceVoiceEnabled: boolean;
+  defaultChartPeriod: "day" | "week" | "month";
+  confirmBeforeLog: boolean;
+}
+
+// ── Binge logs ─────────────────────────────────────────────────────
+
+export type BingeKind = "shopping" | "political" | "scrolling" | "food" | "gambling" | "porn" | "search" | "other";
+
+export interface BingeLog {
+  id: string;
+  kind: BingeKind;
+  startedAt: string;
+  durationMinutes: number | null;
+  triggerNote: string | null;
+  reflection: string | null;
+  pointsDeducted: number;
+  aiPatternNote: string | null;
+}
+
+// ── Custom Vault items ────────────────────────────────────────────
+
+export interface VaultCustomItem {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  category: VaultItem["category"];
+  rate: "A" | "B" | "C";
+  costSEK: number;
+  status: "pending" | "approved" | "rejected";
+  aiReview: string | null;
+  createdAt: string;
 }
