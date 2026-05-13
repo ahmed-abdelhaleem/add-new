@@ -1,16 +1,18 @@
-import { DEMO_USER_ID, getUser, listHealthSamples } from "@/lib/db";
+import { getUser, listHealthSamples } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 import HealthClient from "./HealthClient";
 
 export const dynamic = "force-dynamic";
 
-export default function HealthPage() {
-  const user = getUser(DEMO_USER_ID)!;
+export default async function HealthPage() {
+  const userId = await getUserId();
+  const user = getUser(userId)!;
   const samples = {
-    steps: listHealthSamples(DEMO_USER_ID, "steps"),
-    sleep: listHealthSamples(DEMO_USER_ID, "sleep"),
-    hr: listHealthSamples(DEMO_USER_ID, "hr"),
-    workout: listHealthSamples(DEMO_USER_ID, "workout"),
+    steps: listHealthSamples(userId, "steps"),
+    sleep: listHealthSamples(userId, "sleep"),
+    hr: listHealthSamples(userId, "hr"),
+    workout: listHealthSamples(userId, "workout"),
   };
   return <HealthClient provider={user.health_provider} samples={samples} />;
 }

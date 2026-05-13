@@ -1,14 +1,16 @@
-import { DEMO_USER_ID, getNotificationPrefs, listNotifications } from "@/lib/db";
+import { getNotificationPrefs, listNotifications } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 import NotificationsClient from "./NotificationsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function NotificationsPage() {
+export default async function NotificationsPage() {
+  const userId = await getUserId();
   return (
     <NotificationsClient
-      initialPrefs={getNotificationPrefs(DEMO_USER_ID)}
-      initialHistory={listNotifications(DEMO_USER_ID, 40)}
+      initialPrefs={getNotificationPrefs(userId)}
+      initialHistory={listNotifications(userId, 40)}
     />
   );
 }

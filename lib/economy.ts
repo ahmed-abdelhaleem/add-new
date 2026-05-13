@@ -250,7 +250,33 @@ export const BEHAVIORS: BehaviorDefinition[] = [
     points: 600,
     notes: "Self-log with optional photo",
   },
+
+  // Morning routine (PRD v2 follow-up — daily once each, small but
+  // consistency-building points)
+  { key: "morning_shower", domain: "regulation", label: "Morning shower", points: 150, notes: "Daily", dailyCap: 1 },
+  { key: "morning_brush", domain: "regulation", label: "Morning brushing", points: 100, notes: "Daily", dailyCap: 1 },
+  { key: "morning_minoxidil", domain: "regulation", label: "Morning minoxidil", points: 200, notes: "Hair spray, once/day", dailyCap: 1 },
+  { key: "morning_kelo_cote", domain: "regulation", label: "Morning Kelo-cote scar gel", points: 200, notes: "Once/day", dailyCap: 1 },
+
+  // Midday — mental clarity / regulation
+  { key: "midday_meditation", domain: "mental", label: "Midday meditation", points: 600, notes: "10+ min", dailyCap: 1 },
+  { key: "midday_walk", domain: "physical", label: "Midday walk", points: 500, notes: "15+ min outside", dailyCap: 1 },
+  { key: "midday_breathwork", domain: "mental", label: "Midday breathwork", points: 300, notes: "5 min", dailyCap: 1 },
+
+  // Evening routine
+  { key: "evening_shower", domain: "regulation", label: "Evening shower", points: 150, notes: "Daily", dailyCap: 1 },
+  { key: "evening_brush", domain: "regulation", label: "Evening brushing", points: 100, notes: "Daily", dailyCap: 1 },
+  { key: "evening_minoxidil", domain: "regulation", label: "Evening minoxidil", points: 200, notes: "Twice/day total", dailyCap: 1 },
+  { key: "evening_kelo_cote", domain: "regulation", label: "Evening Kelo-cote", points: 200, notes: "Twice/day total", dailyCap: 1 },
+  { key: "evening_acne_cream", domain: "regulation", label: "Evening acne / keloid cream", points: 200, notes: "Once/day", dailyCap: 1 },
 ];
+
+// Map behaviors to a routine slot for dashboard grouping.
+export const ROUTINE_BEHAVIORS: Record<"morning" | "midday" | "evening", BehaviorKey[]> = {
+  morning: ["morning_shower", "morning_brush", "morning_minoxidil", "morning_kelo_cote"],
+  midday: ["midday_meditation", "midday_walk", "midday_breathwork"],
+  evening: ["evening_shower", "evening_brush", "evening_minoxidil", "evening_kelo_cote", "evening_acne_cream"],
+};
 
 export const BEHAVIOR_INDEX: Record<BehaviorKey, BehaviorDefinition> = Object.fromEntries(
   BEHAVIORS.map((b) => [b.key, b])

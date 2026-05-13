@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI-powered behavioral consistency engine with real-money gamification",
+  "engines": {
+    "node": ">=20.0.0 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000} -H 0.0.0.0",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -14,7 +17,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
     "better-sqlite3": "^11.3.0",
-    "next": "^14.2.35",
+    "next": "14.2.35",
+    "next-auth": "^5.0.0-beta.25",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zod": "^3.23.8"

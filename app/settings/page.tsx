@@ -1,11 +1,13 @@
-import { DEMO_USER_ID, getUser } from "@/lib/db";
+import { getUser, getUserSettings } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
-  const user = getUser(DEMO_USER_ID)!;
+export default async function SettingsPage() {
+  const userId = await getUserId();
+  const user = getUser(userId)!;
   return (
     <SettingsClient
       initial={{
@@ -14,6 +16,7 @@ export default function SettingsPage() {
         charity: user.charity,
         tier: user.tier,
       }}
+      settings={getUserSettings(userId)}
     />
   );
 }

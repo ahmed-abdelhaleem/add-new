@@ -1,24 +1,9 @@
 import Link from "next/link";
 
-import { BEHAVIOR_INDEX, STAKE_RING_PRE_MONTHEND_CAP_PCT, STAKE_TIERS, STREAK_RULES } from "@/lib/economy";
+import { BEHAVIOR_INDEX, ROUTINE_BEHAVIORS, STAKE_RING_PRE_MONTHEND_CAP_PCT, STAKE_TIERS, STREAK_RULES } from "@/lib/economy";
 import { computeEngagement, decayMessage } from "@/lib/decay";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getDailyPlan,
-  getEveningLog,
-  getFoundation,
-  getMealPlanForDate,
-  getShoppingListForPlan,
-  getUser,
-  listActiveBonusEvents,
-  listActiveTrackEnrollments,
-  listBehaviorsAll,
-  listBehaviorsForMonth,
-  listMealLogs,
-  listReadinessScores,
-  listWishlist,
-} from "@/lib/db";
+import { ensureMonthlyState, getDailyPlan, getEveningLog, getFoundation, getMealPlanForDate, getShoppingListForPlan, getUser, listActiveBonusEvents, listActiveTrackEnrollments, listBehaviorsAll, listBehaviorsForMonth, listMealLogs, listReadinessScores, listWishlist } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { listOpenIntercepts } from "@/lib/bank";
 import { currentStreak, pointsToSEK, sekToPoints, summarizeMonth } from "@/lib/points";
 import { buildFeed, relativeTime } from "@/lib/feed";
@@ -44,8 +29,8 @@ function isMonthEnd(d: Date): boolean {
   return d.getDate() === last;
 }
 
-export default function Dashboard() {
-  const userId = DEMO_USER_ID;
+export default async function Dashboard() {
+  const userId = await getUserId();
   const user = getUser(userId)!;
   const tier = STAKE_TIERS[user.tier];
   const now = new Date();
@@ -302,6 +287,11 @@ export default function Dashboard() {
         )}
       </section>
 
+      {/* Routine sections — morning / midday / evening. One-tap log. */}
+      <RoutineSection slot="morning" history={monthHistory} />
+      <RoutineSection slot="midday" history={monthHistory} />
+      <RoutineSection slot="evening" history={monthHistory} />
+
       {/* Live Feed Strip (PRD §6.3) */}
       <section className="card">
         <h2 className="text-xs font-semibold text-ink-200 uppercase tracking-wider">Live</h2>
@@ -371,3 +361,59 @@ function timeOfDay(d: Date): string {
   if (h < 18) return "afternoon";
   return "evening";
 }
+
+function RoutineSection({
+  slot,
+  history,
+}: {
+  slot: "morning" | "midday" | "evening";
+  history: ReturnType<typeof listBehaviorsForMonth>;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const keys = ROUTINE_BEHAVIORS[slot];
+  const titles = { morning: "Morning routine", midday: "Midday reset", evening: "Evening routine" };
+  return (
+    <section className="card">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-ink-200">{titles[slot]}</h2>
+        <span className="text-xs text-ink-400">tap to log</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {keys.map((k) => {
+          const def = BEHAVIOR_INDEX[k];
+          if (!def) return null;
+          const doneToday = history.some(
+            (h) => h.behavior === k && h.loggedAt.slice(0, 10) === today
+          );
+          return (
+            <RoutineButton key={k} behaviorKey={k} label={def.label} points={def.points} doneToday={doneToday} />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// Server component renders a thin client button that POSTs to /api/log.
+function RoutineButton({
+  behaviorKey,
+  label,
+  points,
+  doneToday,
+}: {
+  behaviorKey: string;
+  label: string;
+  points: number;
+  doneToday: boolean;
+}) {
+  return (
+    <RoutineButtonClient
+      behaviorKey={behaviorKey}
+      label={label}
+      points={points}
+      doneToday={doneToday}
+    />
+  );
+}
+
+import RoutineButtonClient from "./components/RoutineButton";

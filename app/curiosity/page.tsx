@@ -1,9 +1,11 @@
-import { DEMO_USER_ID, listCuriosity } from "@/lib/db";
+import { listCuriosity } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import CuriosityClient from "./CuriosityClient";
 
 export const dynamic = "force-dynamic";
 
-export default function CuriosityPage() {
-  const items = listCuriosity(DEMO_USER_ID);
+export default async function CuriosityPage() {
+  const userId = await getUserId();
+  const items = listCuriosity(userId);
   return <CuriosityClient initialItems={items} />;
 }

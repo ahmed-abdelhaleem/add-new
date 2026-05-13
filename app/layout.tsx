@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import "./globals.css";
+import AuthWidget from "./components/AuthWidget";
 import FloatingDump from "./components/FloatingDump";
 
 export const metadata: Metadata = {
@@ -22,6 +23,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen pb-24">
+        <header className="sticky top-0 z-30 border-b border-ink-700 bg-ink-900/90 backdrop-blur">
+          <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-2">
+            <Link href="/" className="text-sm font-display font-semibold tracking-wider text-gold">
+              MOMENTUM
+            </Link>
+            <AuthWidget />
+          </div>
+        </header>
         <main className="mx-auto max-w-2xl px-4 pt-6">{children}</main>
         <FloatingDump />
         <nav className="fixed bottom-0 left-0 right-0 border-t border-ink-700 bg-ink-900/95 backdrop-blur">

@@ -1,9 +1,11 @@
-import { DEMO_USER_ID, listMonthlyReports } from "@/lib/db";
+import { listMonthlyReports } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 import ReportsClient from "./ReportsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function ReportsPage() {
-  return <ReportsClient initialReports={listMonthlyReports(DEMO_USER_ID)} />;
+export default async function ReportsPage() {
+  const userId = await getUserId();
+  return <ReportsClient initialReports={listMonthlyReports(userId)} />;
 }

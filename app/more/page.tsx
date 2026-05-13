@@ -1,15 +1,7 @@
 import Link from "next/link";
 
-import {
-  DEMO_USER_ID,
-  getFoundation,
-  getUser,
-  listActiveBonusEvents,
-  listActiveTrackEnrollments,
-  listMealLogs,
-  listNotifications,
-  listReadinessScores,
-} from "@/lib/db";
+import { getFoundation, getUser, listActiveBonusEvents, listActiveTrackEnrollments, listMealLogs, listNotifications, listReadinessScores } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { listOpenIntercepts } from "@/lib/bank";
 import { lifetimeLevel } from "@/lib/levels";
 import { mealStreak } from "@/lib/nourish";
@@ -24,21 +16,27 @@ interface Item {
   badge?: string;
 }
 
-export default function MorePage() {
-  const user = getUser(DEMO_USER_ID)!;
+export default async function MorePage() {
+  const userId = await getUserId();
+  const user = getUser(userId)!;
   const level = lifetimeLevel(user.total_lifetime_points);
-  const events = listActiveBonusEvents(DEMO_USER_ID);
-  const tracks = listActiveTrackEnrollments(DEMO_USER_ID);
+  const events = listActiveBonusEvents(userId);
+  const tracks = listActiveTrackEnrollments(userId);
   const season = currentSeason();
-  const openIntercepts = listOpenIntercepts(DEMO_USER_ID);
-  const foundation = getFoundation(DEMO_USER_ID);
+  const openIntercepts = listOpenIntercepts(userId);
+  const foundation = getFoundation(userId);
   const foundationActive = foundation && !foundation.deactivatedAt;
-  const readiness = foundationActive ? listReadinessScores(DEMO_USER_ID) : [];
+  const readiness = foundationActive ? listReadinessScores(userId) : [];
   const latestReadiness = readiness[readiness.length - 1];
-  const mealS = mealStreak(listMealLogs(DEMO_USER_ID));
-  const unreadNotifs = listNotifications(DEMO_USER_ID).filter((n) => !n.openedAt && !n.dismissedAt).length;
+  const mealS = mealStreak(listMealLogs(userId));
+  const unreadNotifs = listNotifications(userId).filter((n) => !n.openedAt && !n.dismissedAt).length;
 
   const items: Item[] = [
+    { href: "/behaviors", label: "Manage behaviors", hint: "Adjust points, daily caps, add your own" },
+    { href: "/binge", label: "Spirals & binges", hint: "Track + understand with AI", badge: "new" },
+    { href: "/charts", label: "Charts", hint: "Day / week / month aggregates" },
+    { href: "/vault/custom", label: "Custom rewards", hint: "Propose your own Vault items (AI moderated)" },
+    { href: "/notifications", label: "Notifications", hint: "Four types · granular control", badge: unreadNotifs > 0 ? String(unreadNotifs) : undefined },
     { href: "/foundation", label: "Foundation Mode", hint: "6-month readiness protocol", badge: foundationActive ? (latestReadiness ? `${latestReadiness.total}/100` : "active") : undefined },
     { href: "/nourish", label: "NourishPlan", hint: "Plan / Shop / Today / Deals", badge: mealS > 0 ? `${mealS}d streak` : undefined },
     { href: "/morning", label: "Morning check-in", hint: "Energy + commitment + priorities" },
@@ -59,7 +57,6 @@ export default function MorePage() {
     { href: "/events", label: "Bonus events", hint: "Double hours, drops, rescue", badge: events.length ? `${events.length} active` : undefined },
     { href: "/community", label: "Community challenges", hint: "Opt-in anonymous leaderboard" },
     { href: "/reports", label: "Monthly pattern reports", hint: "Behavioral summary, not diagnosis" },
-    { href: "/notifications", label: "Notifications", hint: "Four types · granular control", badge: unreadNotifs > 0 ? String(unreadNotifs) : undefined },
     { href: "/level", label: `Level ${level.level}`, hint: `${user.total_lifetime_points.toLocaleString()} lifetime pts` },
     { href: "/settings", label: "Settings", hint: "Tier, charity, profile" },
     { href: "/onboarding", label: "Re-run onboarding", hint: "The 7-question conversation" },

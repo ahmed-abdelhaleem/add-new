@@ -3,18 +3,12 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { BEHAVIOR_INDEX } from "@/lib/economy";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getShoppingListForPlan,
-  insertBehavior,
-  markShoppingListSent,
-  recordEarn,
-  updateShoppingListItems,
-} from "@/lib/db";
+import { ensureMonthlyState, getShoppingListForPlan, insertBehavior, markShoppingListSent, recordEarn, updateShoppingListItems } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { monthKey } from "@/lib/time";
 
 export async function GET(req: Request) {
+  const userId = await getUserId();
   const url = new URL(req.url);
   const planId = url.searchParams.get("planId");
   if (!planId) return NextResponse.json({ error: "planId required" }, { status: 400 });
@@ -29,6 +23,7 @@ const checkSchema = z.object({
 });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = checkSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -50,6 +45,7 @@ const sendSchema = z.object({
 // Mark as sent to a delivery provider — awards shopped_as_planned pts.
 // TODO(integration:delivery): replace with actual cart API call per provider.
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = sendSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -60,10 +56,10 @@ export async function POST(req: Request) {
 
   const def = BEHAVIOR_INDEX.shopped_as_planned;
   const mk = monthKey();
-  ensureMonthlyState(DEMO_USER_ID, mk);
+  ensureMonthlyState(userId, mk);
   insertBehavior({
     id: randomUUID(),
-    userId: DEMO_USER_ID,
+    userId: userId,
     behavior: "shopped_as_planned",
     rawPoints: def.points,
     awardedPoints: def.points,
@@ -71,6 +67,6 @@ export async function POST(req: Request) {
     loggedAt: new Date().toISOString(),
     note: `Sent to ${parsed.data.provider}`,
   });
-  recordEarn(DEMO_USER_ID, mk, def.points);
+  recordEarn(userId, mk, def.points);
   return NextResponse.json({ awarded: def.points });
 }

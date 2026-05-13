@@ -1,10 +1,12 @@
-import { DEMO_USER_ID, getUser } from "@/lib/db";
+import { getUser } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { lifetimeLevel, nextUnlock } from "@/lib/levels";
 
 export const dynamic = "force-dynamic";
 
-export default function LevelPage() {
-  const user = getUser(DEMO_USER_ID)!;
+export default async function LevelPage() {
+  const userId = await getUserId();
+  const user = getUser(userId)!;
   const info = lifetimeLevel(user.total_lifetime_points);
   const next = nextUnlock(info.level);
 

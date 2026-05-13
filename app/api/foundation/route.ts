@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  activateFoundation,
-  completeFoundationDeactivation,
-  getFoundation,
-  getUser,
-  listReadinessScores,
-  listTriggerLogs,
-  startFoundationDeactivation,
-  updateUser,
-} from "@/lib/db";
+import { activateFoundation, completeFoundationDeactivation, getFoundation, getUser, listReadinessScores, listTriggerLogs, startFoundationDeactivation, updateUser } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   FOUNDATION_DEFAULT_DAYS,
   deactivationHoursRemaining,
@@ -20,13 +11,14 @@ import {
 import { FOUNDATION_STAKE_SURCHARGE_SEK } from "@/lib/economy";
 
 export async function GET() {
-  const f = getFoundation(DEMO_USER_ID);
+  const userId = await getUserId();
+  const f = getFoundation(userId);
   if (!f) {
     return NextResponse.json({ active: false });
   }
   const active = !f.deactivatedAt;
-  const triggerLogs = listTriggerLogs(DEMO_USER_ID, 100);
-  const readiness = listReadinessScores(DEMO_USER_ID);
+  const triggerLogs = listTriggerLogs(userId, 100);
+  const readiness = listReadinessScores(userId);
   return NextResponse.json({
     active,
     state: f,
@@ -43,35 +35,37 @@ const activateSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = activateSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const user = getUser(DEMO_USER_ID)!;
+  const user = getUser(userId)!;
   const state = activateFoundation({
-    userId: DEMO_USER_ID,
+    userId: userId,
     commitment: parsed.data.commitment,
     originalStakeSEK: user.stake_sek,
     surchargeSEK: FOUNDATION_STAKE_SURCHARGE_SEK,
     durationDays: parsed.data.durationDays ?? FOUNDATION_DEFAULT_DAYS,
   });
   // Bump stake by surcharge while Foundation Mode is on.
-  updateUser(DEMO_USER_ID, { stake_sek: user.stake_sek + FOUNDATION_STAKE_SURCHARGE_SEK });
+  updateUser(userId, { stake_sek: user.stake_sek + FOUNDATION_STAKE_SURCHARGE_SEK });
   return NextResponse.json({ state });
 }
 
 const deactivateSchema = z.object({ action: z.enum(["start", "complete", "cancel"]) });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = deactivateSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const f = getFoundation(DEMO_USER_ID);
+  const f = getFoundation(userId);
   if (!f) return NextResponse.json({ error: "Not active" }, { status: 404 });
 
   if (parsed.data.action === "start") {
-    startFoundationDeactivation(DEMO_USER_ID);
+    startFoundationDeactivation(userId);
     return NextResponse.json({
       ok: true,
       message: `72-hour reflection window started. Re-evaluate before completing.`,
@@ -84,17 +78,17 @@ export async function PATCH(req: Request) {
         { status: 409 }
       );
     }
-    completeFoundationDeactivation(DEMO_USER_ID);
+    completeFoundationDeactivation(userId);
     // Remove the surcharge from the stake.
-    const user = getUser(DEMO_USER_ID)!;
+    const user = getUser(userId)!;
     const restored = Math.max(0, user.stake_sek - f.surchargeSEK);
-    updateUser(DEMO_USER_ID, { stake_sek: restored });
+    updateUser(userId, { stake_sek: restored });
     return NextResponse.json({ ok: true });
   }
   // cancel
   // null out deactivation_started_at by re-activating
   activateFoundation({
-    userId: DEMO_USER_ID,
+    userId: userId,
     commitment: f.commitment,
     originalStakeSEK: f.originalStakeSEK,
     surchargeSEK: f.surchargeSEK,

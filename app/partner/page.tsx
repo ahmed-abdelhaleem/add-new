@@ -1,9 +1,5 @@
-import {
-  DEMO_USER_ID,
-  getPartner,
-  listBehaviorsAll,
-  listPartnerBoosts,
-} from "@/lib/db";
+import { getPartner, listBehaviorsAll, listPartnerBoosts } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { buildWeeklyDigest } from "@/lib/accountability";
 import { getUser } from "@/lib/db";
 
@@ -11,15 +7,16 @@ import PartnerClient from "./PartnerClient";
 
 export const dynamic = "force-dynamic";
 
-export default function PartnerPage() {
-  const partner = getPartner(DEMO_USER_ID);
-  const boosts = listPartnerBoosts(DEMO_USER_ID);
-  const user = getUser(DEMO_USER_ID)!;
+export default async function PartnerPage() {
+  const userId = await getUserId();
+  const partner = getPartner(userId);
+  const boosts = listPartnerBoosts(userId);
+  const user = getUser(userId)!;
   const digest = partner
     ? buildWeeklyDigest({
         userName: user.name,
         partnerName: partner.name,
-        history: listBehaviorsAll(DEMO_USER_ID),
+        history: listBehaviorsAll(userId),
       })
     : null;
   return <PartnerClient initialPartner={partner ?? null} initialBoosts={boosts} digest={digest} />;

@@ -23,6 +23,12 @@ export interface AwardInput {
   eventMultiplier?: number;
   // PRD §9 onboarding bonus: first 7 days earn at 1.5×, no stake charged.
   firstWeekMultiplier?: number;
+  // Per-user overrides on the built-in catalog. NULL means "use default".
+  override?: {
+    points?: number | null;
+    dailyCap?: number | null;
+    dailyCapActive?: boolean;
+  };
 }
 
 export interface AwardResult {
@@ -54,12 +60,24 @@ export function awardForBehavior(input: AwardInput): AwardResult {
 
   const reasons: string[] = [];
 
+  // Effective values after user override.
+  const effectivePoints = input.override?.points ?? def.points;
+  // The user can either replace the cap (override.dailyCap) or disable the
+  // built-in cap entirely (override.dailyCapActive === false). When
+  // dailyCapActive is undefined or true, the override.dailyCap if set wins;
+  // otherwise the built-in def.dailyCap applies.
+  const dailyCapDisabled = input.override?.dailyCapActive === false;
+  const effectiveDailyCap =
+    dailyCapDisabled
+      ? undefined
+      : input.override?.dailyCap ?? def.dailyCap;
+
   // Daily cap check.
-  if (def.dailyCap !== undefined) {
+  if (effectiveDailyCap !== undefined) {
     const today = input.monthHistory.filter(
       (h) => h.behavior === input.behavior && sameDay(new Date(h.loggedAt), input.loggedAt)
     );
-    if (today.length >= def.dailyCap) {
+    if (today.length >= effectiveDailyCap) {
       reasons.push(`Daily cap reached for ${def.label}`);
       return {
         rawPoints: 0,
@@ -86,7 +104,7 @@ export function awardForBehavior(input: AwardInput): AwardResult {
   if (hasCap && remainingDomain <= 0) {
     reasons.push(`Monthly cap reached for ${domain}`);
     return {
-      rawPoints: def.points,
+      rawPoints: effectivePoints,
       awardedPoints: 0,
       multiplier: 0,
       hitDailyCap: false,
@@ -117,13 +135,13 @@ export function awardForBehavior(input: AwardInput): AwardResult {
     reasons.push(`First-week bonus: ${input.firstWeekMultiplier}×`);
   }
 
-  const beforeCap = Math.round(def.points * multiplier);
+  const beforeCap = Math.round(effectivePoints * multiplier);
   const awarded = Math.min(beforeCap, remainingDomain);
   const hitDomainCap = awarded < beforeCap;
   if (hitDomainCap) reasons.push(`Trimmed to domain cap (${remainingDomain} pts remaining)`);
 
   return {
-    rawPoints: def.points,
+    rawPoints: effectivePoints,
     awardedPoints: awarded,
     multiplier,
     hitDailyCap: false,

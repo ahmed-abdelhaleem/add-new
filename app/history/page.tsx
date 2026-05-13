@@ -1,12 +1,14 @@
-import { DEMO_USER_ID, listBehaviorsAll, listMood } from "@/lib/db";
+import { listBehaviorsAll, listMood } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { buildActivityHeatmap, buildMoodHeatmap, intensityClass, moodIntensity } from "@/lib/heatmap";
 
 export const dynamic = "force-dynamic";
 
-export default function HistoryPage() {
-  const history = listBehaviorsAll(DEMO_USER_ID);
+export default async function HistoryPage() {
+  const userId = await getUserId();
+  const history = listBehaviorsAll(userId);
   const cells = buildActivityHeatmap(history);
-  const mood = buildMoodHeatmap(listMood(DEMO_USER_ID));
+  const mood = buildMoodHeatmap(listMood(userId));
 
   return (
     <div className="space-y-5">

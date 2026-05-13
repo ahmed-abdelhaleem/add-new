@@ -3,16 +3,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { BEHAVIOR_INDEX } from "@/lib/economy";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getMealPlanForDate,
-  insertBehavior,
-  insertMealPlan,
-  insertShoppingList,
-  listPantry,
-  recordEarn,
-} from "@/lib/db";
+import { ensureMonthlyState, getMealPlanForDate, insertBehavior, insertMealPlan, insertShoppingList, listPantry, recordEarn } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { MEAL_OPTION_INDEX, buildShoppingList, suggestOptions } from "@/lib/nourish";
 import { monthKey } from "@/lib/time";
 import type { EnergyForecast } from "@/lib/types";
@@ -26,10 +18,11 @@ const schema = z.object({
 });
 
 export async function GET(req: Request) {
+  const userId = await getUserId();
   const url = new URL(req.url);
   const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
   const energy = (url.searchParams.get("energy") as EnergyForecast | null) ?? "medium";
-  const plan = getMealPlanForDate(DEMO_USER_ID, date);
+  const plan = getMealPlanForDate(userId, date);
   return NextResponse.json({
     plan: plan ?? null,
     options: {
@@ -37,11 +30,12 @@ export async function GET(req: Request) {
       lunch: suggestOptions("lunch", energy),
       dinner: suggestOptions("dinner", energy),
     },
-    pantry: listPantry(DEMO_USER_ID),
+    pantry: listPantry(userId),
   });
 }
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -56,7 +50,7 @@ export async function POST(req: Request) {
   const now = new Date();
   insertMealPlan({
     id: planId,
-    userId: DEMO_USER_ID,
+    userId: userId,
     date: parsed.data.date,
     energyForecast: parsed.data.energy,
     breakfastId: parsed.data.breakfastId,
@@ -66,7 +60,7 @@ export async function POST(req: Request) {
   });
 
   // Auto-generate the shopping list.
-  const pantryNames = listPantry(DEMO_USER_ID).map((p) => p.name);
+  const pantryNames = listPantry(userId).map((p) => p.name);
   const items = buildShoppingList({
     options: [
       MEAL_OPTION_INDEX[parsed.data.breakfastId],
@@ -78,7 +72,7 @@ export async function POST(req: Request) {
   const shopId = randomUUID();
   insertShoppingList({
     id: shopId,
-    userId: DEMO_USER_ID,
+    userId: userId,
     planId,
     items,
     createdAt: now.toISOString(),
@@ -89,10 +83,10 @@ export async function POST(req: Request) {
   // Award meal_plan_created.
   const def = BEHAVIOR_INDEX.meal_plan_created;
   const mk = monthKey(now);
-  ensureMonthlyState(DEMO_USER_ID, mk);
+  ensureMonthlyState(userId, mk);
   insertBehavior({
     id: randomUUID(),
-    userId: DEMO_USER_ID,
+    userId: userId,
     behavior: "meal_plan_created",
     rawPoints: def.points,
     awardedPoints: def.points,
@@ -100,7 +94,7 @@ export async function POST(req: Request) {
     loggedAt: now.toISOString(),
     note: `Plan for ${parsed.data.date}`,
   });
-  recordEarn(DEMO_USER_ID, mk, def.points);
+  recordEarn(userId, mk, def.points);
 
   return NextResponse.json({ planId, shopId, awarded: def.points });
 }

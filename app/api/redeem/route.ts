@@ -4,20 +4,15 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 
 import { VAULT_INDEX } from "@/lib/catalog";
-import {
-  DEMO_USER_ID,
-  ensureMonthlyState,
-  getMonthlyState,
-  insertMemoryCard,
-  insertRedemption,
-  recordSpend,
-} from "@/lib/db";
+import { ensureMonthlyState, getMonthlyState, insertMemoryCard, insertRedemption, recordSpend } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { sekToPoints } from "@/lib/points";
 import { monthKey } from "@/lib/time";
 
 const schema = z.object({ itemId: z.string() });
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -34,8 +29,6 @@ export async function POST(req: Request) {
       { status: 409 }
     );
   }
-
-  const userId = DEMO_USER_ID;
   const mk = monthKey();
   ensureMonthlyState(userId, mk);
   const state = getMonthlyState(userId, mk)!;

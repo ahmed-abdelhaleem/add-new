@@ -1,9 +1,5 @@
-import {
-  DEMO_USER_ID,
-  getFoundation,
-  listReadinessScores,
-  listTriggerLogs,
-} from "@/lib/db";
+import { getFoundation, listReadinessScores, listTriggerLogs } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   deactivationHoursRemaining,
   deactivationReady,
@@ -13,10 +9,11 @@ import FoundationClient from "./FoundationClient";
 
 export const dynamic = "force-dynamic";
 
-export default function FoundationPage() {
-  const state = getFoundation(DEMO_USER_ID);
-  const triggerLogs = listTriggerLogs(DEMO_USER_ID, 50);
-  const readiness = listReadinessScores(DEMO_USER_ID);
+export default async function FoundationPage() {
+  const userId = await getUserId();
+  const state = getFoundation(userId);
+  const triggerLogs = listTriggerLogs(userId, 50);
+  const readiness = listReadinessScores(userId);
   return (
     <FoundationClient
       state={state ?? null}

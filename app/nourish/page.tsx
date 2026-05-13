@@ -1,10 +1,5 @@
-import {
-  DEMO_USER_ID,
-  getMealPlanForDate,
-  getShoppingListForPlan,
-  listMealLogs,
-  listPantry,
-} from "@/lib/db";
+import { getMealPlanForDate, getShoppingListForPlan, listMealLogs, listPantry } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { MEAL_OPTION_INDEX, WEEKLY_DEALS, mealStreak, suggestOptions } from "@/lib/nourish";
 import { dayKey } from "@/lib/time";
 
@@ -12,12 +7,13 @@ import NourishClient from "./NourishClient";
 
 export const dynamic = "force-dynamic";
 
-export default function NourishPage() {
+export default async function NourishPage() {
+  const userId = await getUserId();
   const today = dayKey();
-  const plan = getMealPlanForDate(DEMO_USER_ID, today);
+  const plan = getMealPlanForDate(userId, today);
   const shop = plan ? getShoppingListForPlan(plan.id) : null;
-  const pantry = listPantry(DEMO_USER_ID);
-  const logs = listMealLogs(DEMO_USER_ID);
+  const pantry = listPantry(userId);
+  const logs = listMealLogs(userId);
   const streak = mealStreak(logs);
 
   // Default suggestion set for medium energy if no plan exists.

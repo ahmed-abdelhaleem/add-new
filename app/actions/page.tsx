@@ -1,8 +1,10 @@
-import { DEMO_USER_ID, listActionItems } from "@/lib/db";
+import { listActionItems } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import ActionsClient from "./ActionsClient";
 
 export const dynamic = "force-dynamic";
 
-export default function ActionsPage() {
-  return <ActionsClient initialItems={listActionItems(DEMO_USER_ID)} />;
+export default async function ActionsPage() {
+  const userId = await getUserId();
+  return <ActionsClient initialItems={listActionItems(userId)} />;
 }

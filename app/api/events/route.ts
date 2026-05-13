@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  DEMO_USER_ID,
-  completeBonusEvent,
-  insertBonusEvent,
-  listActiveBonusEvents,
-  listAllBonusEvents,
-  listBehaviorsAll,
-  recordBonus,
-} from "@/lib/db";
+import { completeBonusEvent, insertBonusEvent, listActiveBonusEvents, listAllBonusEvents, listBehaviorsAll, recordBonus } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import {
   generateChallengeDrop,
   generateDoublePointsHour,
@@ -20,9 +13,10 @@ import { currentSeason, seasonalEndDate } from "@/lib/seasons";
 import { monthKey } from "@/lib/time";
 
 export async function GET() {
+  const userId = await getUserId();
   return NextResponse.json({
-    active: listActiveBonusEvents(DEMO_USER_ID),
-    history: listAllBonusEvents(DEMO_USER_ID, 20),
+    active: listActiveBonusEvents(userId),
+    history: listAllBonusEvents(userId, 20),
   });
 }
 
@@ -34,6 +28,7 @@ const generateSchema = z.object({
 // engagement signature daily and decides which (if any) events to fire.
 // TODO(integration:scheduler): wire to Inngest / Trigger.dev / Vercel Cron.
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = generateSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -41,15 +36,15 @@ export async function POST(req: Request) {
   let evt;
   switch (parsed.data.kind) {
     case "double_hour":
-      evt = generateDoublePointsHour(DEMO_USER_ID);
+      evt = generateDoublePointsHour(userId);
       break;
     case "challenge_drop":
-      evt = generateChallengeDrop(DEMO_USER_ID);
+      evt = generateChallengeDrop(userId);
       break;
     case "rescue_week":
       // Should only fire when decay tier ≥ 7, but allow manual override for demo.
-      const _engagement = computeEngagement(listBehaviorsAll(DEMO_USER_ID));
-      evt = generateRescueWeek(DEMO_USER_ID);
+      const _engagement = computeEngagement(listBehaviorsAll(userId));
+      evt = generateRescueWeek(userId);
       break;
     case "seasonal":
       const season = currentSeason();
@@ -58,7 +53,7 @@ export async function POST(req: Request) {
       }
       const ends = seasonalEndDate();
       evt = insertBonusEvent({
-        userId: DEMO_USER_ID,
+        userId: userId,
         kind: "seasonal",
         payload: season.payload,
         startsAt: new Date().toISOString(),
@@ -72,13 +67,14 @@ export async function POST(req: Request) {
 const completeSchema = z.object({ id: z.string(), bonusPoints: z.number().int().min(0) });
 
 export async function PATCH(req: Request) {
+  const userId = await getUserId();
   const parsed = completeSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   completeBonusEvent(parsed.data.id, parsed.data.bonusPoints);
   if (parsed.data.bonusPoints > 0) {
-    recordBonus(DEMO_USER_ID, monthKey(), parsed.data.bonusPoints);
+    recordBonus(userId, monthKey(), parsed.data.bonusPoints);
   }
   return NextResponse.json({ ok: true });
 }

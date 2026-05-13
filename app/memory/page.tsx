@@ -1,9 +1,11 @@
-import { DEMO_USER_ID, listMemoryCards } from "@/lib/db";
+import { listMemoryCards } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export default function MemoryPage() {
-  const cards = listMemoryCards(DEMO_USER_ID);
+export default async function MemoryPage() {
+  const userId = await getUserId();
+  const cards = listMemoryCards(userId);
 
   return (
     <div className="space-y-5">

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { DEMO_USER_ID, listMood, upsertMood } from "@/lib/db";
+import { listMood, upsertMood } from "@/lib/db";
+import { getUserId } from "@/lib/session";
 import { dayKey } from "@/lib/time";
 
 const schema = z.object({
@@ -11,15 +12,17 @@ const schema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ logs: listMood(DEMO_USER_ID) });
+  const userId = await getUserId();
+  return NextResponse.json({ logs: listMood(userId) });
 }
 
 export async function POST(req: Request) {
+  const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  upsertMood(DEMO_USER_ID, {
+  upsertMood(userId, {
     date: parsed.data.date ?? dayKey(),
     mood: parsed.data.mood as 1 | 2 | 3 | 4 | 5,
     note: parsed.data.note,
