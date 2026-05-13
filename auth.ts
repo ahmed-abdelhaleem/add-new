@@ -8,6 +8,8 @@ import {
   findUserByProvider,
   insertOauthAccount,
 } from "./lib/db";
+import { isIntegrationEnabled } from "./lib/integrations";
+import { googleOAuthEnvReady } from "./lib/google-oauth-env";
 
 /**
  * NextAuth v5 (Auth.js) configuration.
@@ -25,17 +27,15 @@ import {
  *
  * Without these, sign-in routes 404 — the app still works against the
  * demo user via getUserId()'s fallback path.
+ *
+ * Runtime on/off is controlled per deployment in the admin dashboard
+ * (`integration_flags.google_oauth`); see `isGoogleAuthActive()` in
+ * `lib/integrations.ts`.
  */
-export const authEnabled = !!(
-  process.env.AUTH_SECRET &&
-  process.env.AUTH_GOOGLE_ID &&
-  process.env.AUTH_GOOGLE_SECRET
-);
-
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },
-  providers: authEnabled
+  providers: googleOAuthEnvReady()
     ? [
         Google({
           clientId: process.env.AUTH_GOOGLE_ID!,
@@ -45,6 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     : [],
   callbacks: {
     async signIn({ user, account, profile }) {
+      if (!isIntegrationEnabled("google_oauth")) return false;
       if (!account || !user?.email) return false;
       const providerId = account.providerAccountId;
       const existingByProvider = findUserByProvider(account.provider, providerId);

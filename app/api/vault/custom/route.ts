@@ -8,6 +8,7 @@ import {
   insertVaultCustom,
   listVaultCustom,
 } from "@/lib/db";
+import { isAnthropicCloudEnabled } from "@/lib/integrations";
 import { getUserId } from "@/lib/session";
 
 const DEFAULT_MODEL = process.env.ACE_MODEL || "claude-sonnet-4-6";
@@ -38,7 +39,7 @@ async function moderate(input: z.infer<typeof schema>): Promise<AiReview> {
   // Local fallback heuristic — flag obvious problematic categories.
   const text = `${input.title} ${input.description ?? ""}`.toLowerCase();
   const harmful = /\b(gamble|casino|bet\s|crypto|coke|cocaine|alcohol|booze|liquor|porn|escort|smoke|cigarette|nicotine|vape)\b/.test(text);
-  if (!apiKey) {
+  if (!apiKey || !isAnthropicCloudEnabled()) {
     if (harmful) {
       return { approve: false, reason: "Heuristic block: matches a harmful keyword." };
     }

@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type {
@@ -60,7 +60,11 @@ function dbPath(): string {
   // Volume is attached. Override with MOMENTUM_DB_PATH for everything else.
   const explicit = process.env.MOMENTUM_DB_PATH;
   if (explicit) return resolve(process.cwd(), explicit);
-  if (process.env.NODE_ENV === "production") return "/data/momentum.db";
+  // `next build` sets NODE_ENV=production locally; /data usually does not exist,
+  // so use the repo root. On Railway with a /data volume, use the persistent path.
+  if (process.env.NODE_ENV === "production" && existsSync("/data")) {
+    return "/data/momentum.db";
+  }
   return resolve(process.cwd(), "momentum.db");
 }
 
@@ -69,6 +73,7 @@ export function getDb(): Database.Database {
   const path = dbPath();
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
+  db.pragma("busy_timeout = 8000");
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   migrate(db);
@@ -572,7 +577,30 @@ function migrate(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
     CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+
+    CREATE TABLE IF NOT EXISTS integration_flags (
+      integration_key TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL
+    );
   `);
+  seedIntegrationFlagsIfEmpty(db);
+}
+
+function seedIntegrationFlagsIfEmpty(db: Database.Database) {
+  const keys = [
+    "google_oauth",
+    "anthropic",
+    "payments",
+    "health_wearables",
+    "bank_linking",
+    "voice_tts",
+  ] as const;
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO integration_flags (integration_key, enabled, updated_at) VALUES (?, 1, ?)`
+  );
+  for (const k of keys) insert.run(k, now);
 }
 
 function seedIfEmpty(db: Database.Database) {
@@ -624,6 +652,41 @@ function seedIfEmpty(db: Database.Database) {
 }
 
 export const DEMO_USER_ID = "user_demo";
+
+export function getIntegrationFlag(integrationKey: string): boolean {
+  const row = getDb()
+    .prepare(`SELECT enabled FROM integration_flags WHERE integration_key = ?`)
+    .get(integrationKey) as { enabled: number } | undefined;
+  if (row === undefined) return true;
+  return row.enabled !== 0;
+}
+
+export function setIntegrationFlag(integrationKey: string, enabled: boolean) {
+  const now = new Date().toISOString();
+  getDb()
+    .prepare(
+      `INSERT INTO integration_flags (integration_key, enabled, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(integration_key) DO UPDATE SET
+         enabled = excluded.enabled,
+         updated_at = excluded.updated_at`
+    )
+    .run(integrationKey, enabled ? 1 : 0, now);
+}
+
+export function listIntegrationFlags(): { key: string; enabled: boolean; updatedAt: string | null }[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT integration_key as key, enabled, updated_at as updatedAt
+         FROM integration_flags ORDER BY integration_key`
+    )
+    .all() as { key: string; enabled: number; updatedAt: string }[];
+  return rows.map((r) => ({
+    key: r.key,
+    enabled: r.enabled !== 0,
+    updatedAt: r.updatedAt ?? null,
+  }));
+}
 
 export interface UserRow {
   id: string;

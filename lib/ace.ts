@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import { BEHAVIOR_INDEX } from "./economy";
+import { isAnthropicCloudEnabled } from "./integrations";
 import { computeEngagement, decayMessage } from "./decay";
 import { currentStreak, pointsToSEK, summarizeMonth } from "./points";
 import type {
@@ -148,7 +149,7 @@ function localFallback(message: string, ctx: AceContext): string {
 export async function respondAsAce(message: string, ctx: AceContext): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
+  if (!apiKey || !isAnthropicCloudEnabled()) {
     return localFallback(message, ctx);
   }
 
@@ -234,7 +235,7 @@ export async function categorizeBrainDump(text: string): Promise<BrainDumpCatego
     .filter(Boolean);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
+  if (isAnthropicCloudEnabled() && apiKey) {
     try {
       const client = new Anthropic({ apiKey });
       const response = await client.messages.create({

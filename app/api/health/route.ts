@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getUser, listHealthSamples } from "@/lib/db";
+import { isHealthWearablesIntegrationEnabled } from "@/lib/integrations";
 import { getUserId } from "@/lib/session";
 import {
   connectHealthProvider,
@@ -35,6 +36,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   if (parsed.data.action === "connect") {
+    if (!isHealthWearablesIntegrationEnabled()) {
+      return NextResponse.json({ error: "Health / wearables integration is disabled in admin settings." }, { status: 503 });
+    }
     if (!parsed.data.provider) return NextResponse.json({ error: "Provider required" }, { status: 400 });
     connectHealthProvider(userId, parsed.data.provider);
   } else {

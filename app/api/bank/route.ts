@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ensureMonthlyState, getUser, insertBehavior, listBankTransactions, recordEarn } from "@/lib/db";
+import { isBankLinkingIntegrationEnabled } from "@/lib/integrations";
 import { getUserId } from "@/lib/session";
 import {
   cancelTransaction,
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   const parsed = connectSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  if (parsed.data.action === "connect" && !isBankLinkingIntegrationEnabled()) {
+    return NextResponse.json({ error: "Bank integration is disabled in admin settings." }, { status: 503 });
   }
   if (parsed.data.action === "connect") connectBank(userId);
   else disconnectBank(userId);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { ensureMonthlyState, getMonthlyState, getUser, listCharityDisbursements, listPayments } from "@/lib/db";
+import { isPaymentsIntegrationEnabled } from "@/lib/integrations";
 import { getUserId } from "@/lib/session";
 import { pointsToSEK } from "@/lib/points";
 import { chargeMonthlyStake, disburseToCharity, totalSEKThisYear } from "@/lib/payments";
@@ -23,6 +24,9 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  if (!isPaymentsIntegrationEnabled()) {
+    return NextResponse.json({ error: "Payments integration is disabled in admin settings." }, { status: 503 });
+  }
   const userId = await getUserId();
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) {

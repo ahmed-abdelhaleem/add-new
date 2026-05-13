@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import { BEHAVIOR_INDEX } from "./economy";
 import { computeEngagement } from "./decay";
+import { isAnthropicCloudEnabled } from "./integrations";
 import { currentStreak, pointsToSEK, summarizeMonth } from "./points";
 import type { LoggedBehavior, MedicationLog, MonthlyReport, MoodLog } from "./types";
 
@@ -51,7 +52,7 @@ Medication days: ${onMedDays}/${input.medication.length || 0}`;
   const generatedAt = new Date().toISOString();
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
+  if (!apiKey || !isAnthropicCloudEnabled()) {
     const fallback = `**${input.monthKey} — pattern report**
 
 This month you recovered ${recovered} SEK of your stake. Your strongest pattern was ${topBehaviors[0] ?? "n/a"}; the quietest was ${bottomBehaviors[0] ?? "n/a"}.
